@@ -34,6 +34,7 @@ export function Seat({
       onClick={targetable ? onTarget : undefined}
     >
       <div className="seat-header">
+        <span className="seat-no">{p.seat + 1}号</span>
         <span className="seat-general">{GENERAL_NAMES[p.general]}</span>
         {pid === humanId && <span className="seat-you">你</span>}
         <span className={roleVisible ? `role role-${p.role}` : 'role role-hidden'}>

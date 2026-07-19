@@ -75,6 +75,11 @@ export function cardLabel(s: GameState, id: number): string {
   return `${CARD_NAMES[c.name]}${SUIT_SYMBOLS[c.suit]}${rankLabel(c.rank)}`;
 }
 
+export function seatLabel(s: GameState, pid: PlayerId): string {
+  const p = s.players.find((x) => x.id === pid)!;
+  return `${p.seat + 1}号位`;
+}
+
 export function playerLabel(s: GameState, pid: PlayerId, humanId?: PlayerId): string {
   const p = s.players.find((x) => x.id === pid)!;
   const you = humanId !== undefined && pid === humanId ? '(你)' : '';

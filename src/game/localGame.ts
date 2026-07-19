@@ -6,7 +6,7 @@ import { applyAction, createGame } from '../engine/engine';
 import { decide, defaultResponse } from '../ai/simpleAi';
 
 export const HUMAN_ID = 'p0';
-const AI_DELAY_MS = 600;
+const AI_DELAY_MS = 900; // 出牌间隔,便于观察局势
 
 export class LocalGame {
   state: GameState;
@@ -14,8 +14,8 @@ export class LocalGame {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private paused = true;
 
-  constructor(seed: number) {
-    this.state = createGame({ seed }).state;
+  constructor(seed: number, playerCount: 4 | 5 | 8 = 4) {
+    this.state = createGame({ seed, playerCount }).state;
   }
 
   onChange(fn: (s: GameState) => void): () => void {

@@ -5,7 +5,7 @@ import type { GameState, PendingRequest, PlayerId, ResponseData } from '../engin
 import { isBlack, isRed } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
-import { OPTION_LABELS, SKILL_NAMES, describeRequest, playerLabel } from './text';
+import { OPTION_LABELS, SKILL_NAMES, describeRequest, playerLabel, seatLabel } from './text';
 
 const TIMEOUT_SECONDS = 20;
 
@@ -185,7 +185,7 @@ export function PromptDialog({
                   className={pickedPlayers.includes(pid) ? 'btn btn-skill btn-skill-on' : 'btn'}
                   onClick={() => toggle(pid)}
                 >
-                  {playerLabel(state, pid, req.player)}
+                  {seatLabel(state, pid)}·{playerLabel(state, pid, req.player)}
                 </button>
               ))}
             </div>
