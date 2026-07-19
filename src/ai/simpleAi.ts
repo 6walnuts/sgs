@@ -457,6 +457,9 @@ function decideOption(
       const heart = p.hand.some((id) => effectiveSuit(s, id, p.id) === 'heart');
       return heart ? { kind: 'option', index: 0 } : { kind: 'decline' };
     }
+    case 'shuangxiong':
+      // 简化:摸两张通常优于赌一张判定牌,不发动
+      return { kind: 'decline' };
     case 'guhuo-challenge':
       // 保守:体力充裕才质疑(猜错真牌要失去 1 点体力)
       return p.hp >= 4 ? { kind: 'option', index: 0 } : { kind: 'decline' };
@@ -511,6 +514,10 @@ function decideChooseCards(
       if (hearts.length === 0) return { kind: 'decline' };
       return { kind: 'cards', cardIds: [hearts[0]] };
     }
+    case 'pindian': {
+      const best = p.hand.slice().sort((a, b) => card(s, b).rank - card(s, a).rank)[0];
+      return { kind: 'cards', cardIds: [best] };
+    }
     case 'shensu-equip': {
       const equips = Object.values(p.equips).filter((id): id is CardId => id !== undefined);
       if (equips.length === 0) return { kind: 'decline' };
@@ -557,6 +564,17 @@ function decideChoosePlayer(
       const t = enemies.sort((a, b) => a.hp - b.hp)[0];
       if (t) return { kind: 'players', players: [t.id] };
       return { kind: 'decline' };
+    }
+    case 'jieming': {
+      // 补牌给缺牌最多的自己人(含自己)
+      const mine = cands.filter((x) => x.id === p.id || !isEnemy(s, p.role, x));
+      const t = mine.sort((a, b) => (b.maxHp - b.hand.length) - (a.maxHp - a.hand.length))[0];
+      if (t && t.maxHp - t.hand.length > 0) return { kind: 'players', players: [t.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'quhu': {
+      const t = enemies[0] ?? cands[0];
+      return { kind: 'players', players: [t.id] };
     }
     default: {
       if (req.canDecline) return { kind: 'decline' };

@@ -2,6 +2,7 @@ import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
 import { WEAPON_RANGE, isBlack, isRed, isShaCard } from './deck';
 import { alivePlayers, card, fail, hasSkill, player } from './kernel';
 import type { Ctx } from './kernel';
+import { GENERALS } from './generals';
 
 // 座次距离(仅计存活角色)+ 目标的 +1 马 - 自己的 -1 马 - 马术,最小为 1
 export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
@@ -40,7 +41,19 @@ export function shaLimit(s: GameState, p: PlayerState): number {
   if (hasSkill(s, p, 'paoxiao')) return Infinity;
   const w = p.equips.weapon;
   if (w !== undefined && card(s, w).name === 'zhugeliannu') return Infinity;
-  return 1;
+  return 1 + (p.flags.tianyiWin ? 1 : 0); // 天义拼点赢:本回合可多使用一张杀
+}
+
+// 手牌上限:体力值;血裔(袁绍主公技)每有一名其他群势力角色 +2
+export function handLimit(s: GameState, p: PlayerState): number {
+  let n = Math.max(0, p.hp);
+  if (hasSkill(s, p, 'xueyi')) {
+    const qunOthers = alivePlayers(s).filter(
+      (x) => x.id !== p.id && GENERALS[x.general].faction === 'qun',
+    ).length;
+    n += 2 * qunOthers;
+  }
+  return n;
 }
 
 export function shaUsed(p: PlayerState): number {
@@ -99,6 +112,11 @@ export function validateResponseCard(
       if (pattern !== 'shan') fail('倾国只能将黑色手牌当闪');
       if (!hasSkill(s, p, 'qingguo')) fail('你没有倾国技能');
       if (!isBlack(c.suit)) fail('倾国需要黑色牌');
+      return resp.cardId;
+    case 'kanpo':
+      if (pattern !== 'wuxie') fail('看破只能将黑色手牌当无懈可击');
+      if (!hasSkill(s, p, 'kanpo')) fail('你没有看破技能');
+      if (!isBlack(c.suit)) fail('看破需要黑色牌');
       return resp.cardId;
   }
   if (pattern === 'sha') {

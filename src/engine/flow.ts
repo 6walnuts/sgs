@@ -11,7 +11,7 @@ import {
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed, shaElement } from './deck';
 import {
-  assertInHand, attackRange, distance, kongchengProtected, shaLimit, shaUsed,
+  assertInHand, attackRange, distance, handLimit, kongchengProtected, shaLimit, shaUsed,
 } from './rules';
 import { pushTrick, registerPlayAs } from './frames';
 import { GENERALS } from './generals';
@@ -93,7 +93,8 @@ export function flowRun(ctx: Ctx): void {
             type: 'phaseSkipped', player: p.id, phase: 'draw',
             reason: p.flags.skipJudge ? 'shensu' : 'bingliang',
           });
-        } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')) {
+        } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')
+            || hasSkill(s, p, 'shuangxiong')) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
           let n = 2;
@@ -123,7 +124,7 @@ export function flowRun(ctx: Ctx): void {
       ask(ctx, { player: p.id, type: 'play' });
       return;
     case 'discard': {
-      const excess = p.hand.length - Math.max(0, p.hp);
+      const excess = p.hand.length - handLimit(s, p);
       if (excess > 0 && hasSkill(s, p, 'keji') && !p.flags.anySha) {
         emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'keji' });
         emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'discard', reason: 'keji' });
@@ -436,6 +437,7 @@ function startSlash(
   element?: DamageElement,
 ): void {
   const s = ctx.s;
+  if (p.flags.tianyiLose) fail('天义拼点失败:本回合不能使用杀');
   if (targets.length === 0) fail('需要选择目标');
   if (new Set(targets).size !== targets.length) fail('不能重复选择目标');
   if (targets.length > 1) {
@@ -451,7 +453,10 @@ function startSlash(
     if (!t.alive) fail('目标已死亡');
     if (t.id === p.id) fail('不能对自己使用杀');
     if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
-    if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
+    // 天义拼点赢:本回合使用杀无距离限制
+    if (!p.flags.tianyiWin && distance(s, p.id, t.id) > attackRange(s, p)) {
+      fail('目标超出攻击范围');
+    }
   }
   if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
   p.flags.sha = shaUsed(p) + 1;
@@ -637,6 +642,93 @@ function useSkill(
       ask(ctx, {
         player: t.id, type: 'choose-option',
         options: ['spade', 'heart', 'club', 'diamond'], canDecline: false, reason: 'fanjian-suit',
+      });
+      return;
+    }
+    case 'qiangxi': {
+      if (!hasSkill(s, p, 'qiangxi')) fail('你没有强袭技能');
+      if (p.flags.qiangxi) fail('强袭每阶段限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
+      if (cardIds.length > 1) fail('强袭至多弃置一张武器牌');
+      if (cardIds.length === 1) {
+        const cid = cardIds[0];
+        if (!p.hand.includes(cid) && p.equips.weapon !== cid) fail('所选牌不属于你');
+        if (equipSlotOf(card(s, cid).name) !== 'weapon') fail('强袭需要弃置武器牌');
+      }
+      p.flags.qiangxi = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'qiangxi' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      if (cardIds.length === 1) moveCard(ctx, cardIds[0], { zone: 'discard' }, 'qiangxi');
+      pushFrame(ctx, {
+        type: 'damage', step: 'pre', source: p.id, target: t.id, amount: 1, causeCardIds: [],
+      });
+      if (cardIds.length === 0) loseHp(ctx, p.id, 1); // 濒死先于伤害结算
+      return;
+    }
+    case 'quhu': {
+      if (!hasSkill(s, p, 'quhu')) fail('你没有驱虎技能');
+      if (p.flags.quhu) fail('驱虎每回合限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (t.hp <= p.hp) fail('驱虎只能指定体力值比你高的角色');
+      if (p.hand.length === 0 || t.hand.length === 0) fail('拼点双方都需要有手牌');
+      p.flags.quhu = true;
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, { type: 'quhu', step: 'start', source: p.id, target: t.id });
+      return;
+    }
+    case 'tianyi': {
+      if (!hasSkill(s, p, 'tianyi')) fail('你没有天义技能');
+      if (p.flags.tianyi) fail('天义每回合限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (p.hand.length === 0 || t.hand.length === 0) fail('拼点双方都需要有手牌');
+      p.flags.tianyi = true;
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, { type: 'tianyi', step: 'start', source: p.id, target: t.id });
+      return;
+    }
+    case 'lianhuan': {
+      if (!hasSkill(s, p, 'lianhuan')) fail('你没有连环技能');
+      if (cardIds.length !== 1) fail('连环需要选择一张梅花手牌');
+      assertInHand(s, p, cardIds[0]);
+      if (card(s, cardIds[0]).suit !== 'club') fail('连环需要梅花牌');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'lianhuan' });
+      playAs(ctx, p, cardIds[0], 'tiesuo', targets);
+      return;
+    }
+    case 'huoji': {
+      if (!hasSkill(s, p, 'huoji')) fail('你没有火计技能');
+      if (cardIds.length !== 1) fail('火计需要选择一张红色手牌');
+      assertInHand(s, p, cardIds[0]);
+      if (!isRed(card(s, cardIds[0]).suit)) fail('火计需要红色牌');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'huoji' });
+      playAs(ctx, p, cardIds[0], 'huogong', targets);
+      return;
+    }
+    case 'shuangxiong': {
+      const judged = p.flags.shuangxiong;
+      if (typeof judged !== 'number') fail('本回合未发动双雄,不能转化决斗');
+      if (cardIds.length !== 1) fail('双雄需要选择一张手牌');
+      assertInHand(s, p, cardIds[0]);
+      if (isRed(card(s, cardIds[0]).suit) === isRed(card(s, judged).suit)) {
+        fail('双雄需要与判定牌颜色不同的手牌');
+      }
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'shuangxiong' });
+      playAs(ctx, p, cardIds[0], 'juedou', targets);
+      return;
+    }
+    case 'luanji': {
+      if (!hasSkill(s, p, 'luanji')) fail('你没有乱击技能');
+      if (cardIds.length !== 2 || new Set(cardIds).size !== 2) fail('乱击需要两张相同花色的手牌');
+      for (const id of cardIds) assertInHand(s, p, id);
+      if (card(s, cardIds[0]).suit !== card(s, cardIds[1]).suit) fail('乱击需要相同花色');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'luanji' });
+      const queue = orderFrom(s).filter((pid) => pid !== p.id);
+      moveCards(ctx, cardIds, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId: cardIds[0], targets: queue, as: 'wanjian' });
+      pushFrame(ctx, {
+        type: 'aoe', step: 'next', effName: 'wanjian', cardId: cardIds[0],
+        extraCardIds: [cardIds[1]], source: p.id, queue, idx: 0,
       });
       return;
     }

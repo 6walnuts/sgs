@@ -59,7 +59,7 @@ export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boole
   if (!p.alive) return false;
   const def = GENERALS[p.general];
   if (!def.skills.includes(skill)) return false;
-  if (skill === 'jiuyuan' && p.role !== 'lord') return false;
+  if ((skill === 'jiuyuan' || skill === 'xueyi') && p.role !== 'lord') return false;
   return true;
 }
 
