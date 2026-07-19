@@ -110,8 +110,12 @@ describe('联机服务器', () => {
     expect(syncB.you).toBe('p1');
 
     // 视角过滤:乙看不到甲的手牌与牌堆内容
+    // (首个 sync 来自同一次广播,两个视角对应同一状态;
+    //  若 p0 恰好是主公,开局已摸 2 张,手牌数不固定为 4)
+    const p0FromA = syncA.state.players.find((p) => p.id === 'p0')!;
     const p0FromB = syncB.state.players.find((p) => p.id === 'p0')!;
-    expect(p0FromB.hand).toHaveLength(4);
+    expect(p0FromB.hand.length).toBe(p0FromA.hand.length);
+    expect(p0FromB.hand.length).toBeGreaterThanOrEqual(4);
     expect(p0FromB.hand.every((id) => id === -1)).toBe(true);
     const p1FromB = syncB.state.players.find((p) => p.id === 'p1')!;
     expect(p1FromB.hand.every((id) => id > 0)).toBe(true);
@@ -119,7 +123,6 @@ describe('联机服务器', () => {
     expect(syncB.state.rngState).toBe(0);
     expect(syncB.state.stack).toHaveLength(0);
     // 甲的完整视角里自己手牌可见
-    const p0FromA = syncA.state.players.find((p) => p.id === 'p0')!;
     expect(p0FromA.hand.every((id) => id > 0)).toBe(true);
   });
 
