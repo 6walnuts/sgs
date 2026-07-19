@@ -15,7 +15,7 @@ const TIMEOUT_SECONDS = 20;
 
 interface CandidateCard {
   cardId: number;
-  skill?: 'wusheng' | 'jijiu' | 'longdan' | 'qingguo';
+  skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo';
 }
 
 function respondCandidates(
@@ -41,6 +41,11 @@ function respondCandidates(
     if (skills.includes('wusheng')) {
       for (const id of p.hand) {
         if (isRed(s.cards[id].suit) && s.cards[id].name !== 'sha') out.push({ cardId: id, skill: 'wusheng' });
+      }
+    }
+    if (skills.includes('jwusheng')) {
+      for (const id of p.hand) {
+        if (isRed(s.cards[id].suit) && s.cards[id].name !== 'sha') out.push({ cardId: id, skill: 'jwusheng' });
       }
     }
     if (skills.includes('longdan')) {

@@ -20,6 +20,8 @@ export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
   if (hasSkill(s, src, 'mashu')) d -= 1;
   // 屯田:邓艾每有一张"田",计算与其他角色的距离 -1
   if (hasSkill(s, src, 'tuntian')) d -= src.tian?.length ?? 0;
+  // 奇谋(界魏延):本回合距离 -X
+  if (typeof src.flags.qimou === 'number') d -= src.flags.qimou;
   return Math.max(1, d);
 }
 
@@ -40,15 +42,21 @@ export function armorName(s: GameState, p: PlayerState): string | null {
 }
 
 export function shaLimit(s: GameState, p: PlayerState): number {
-  if (hasSkill(s, p, 'paoxiao')) return Infinity;
+  if (hasSkill(s, p, 'paoxiao') || hasSkill(s, p, 'jpaoxiao')) return Infinity;
   const w = p.equips.weapon;
   if (w !== undefined && card(s, w).name === 'zhugeliannu') return Infinity;
-  return 1 + (p.flags.tianyiWin ? 1 : 0); // 天义拼点赢:本回合可多使用一张杀
+  return 1 + (p.flags.tianyiWin ? 1 : 0) // 天义拼点赢:本回合可多使用一张杀
+    + Number(p.flags.zhaxiang ?? 0)      // 诈降:每失去 1 点体力,杀次数 +1
+    + Number(p.flags.qimou ?? 0);        // 奇谋:额外 X 张杀
 }
 
 // 手牌上限:体力值;血裔(袁绍主公技)每有一名其他群势力角色 +2
 export function handLimit(s: GameState, p: PlayerState): number {
   let n = Math.max(0, p.hp);
+  // 界英姿:手牌上限改为体力上限
+  if (hasSkill(s, p, 'jyingzi')) n = Math.max(n, p.maxHp);
+  // 界集智弃基本牌 / 界洛神本回合获得的判定牌:手牌上限 +1/张
+  n += Number(p.flags.jizhiBonus ?? 0) + Number(p.flags.luoshenBonus ?? 0);
   if (hasSkill(s, p, 'xueyi')) {
     const qunOthers = alivePlayers(s).filter(
       (x) => x.id !== p.id && factionOf(s, x) === 'qun',
@@ -96,6 +104,11 @@ export function validateResponseCard(
     case 'wusheng':
       if (pattern !== 'sha') fail('武圣只能将红色牌当杀');
       if (!hasSkill(s, p, 'wusheng')) fail('你没有武圣技能');
+      if (!isRed(c.suit)) fail('武圣需要红色牌');
+      return resp.cardId;
+    case 'jwusheng':
+      if (pattern !== 'sha') fail('武圣只能将红色牌当杀');
+      if (!hasSkill(s, p, 'jwusheng')) fail('你没有武圣技能');
       if (!isRed(c.suit)) fail('武圣需要红色牌');
       return resp.cardId;
     case 'jijiu':

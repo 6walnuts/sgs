@@ -29,8 +29,11 @@ export function nextTurn(ctx: Ctx): void {
   const s = ctx.s;
   const cur = player(s, s.turn.activePlayer);
   cur.flags = {};
-  // 智迟的免疫只持续到该回合结束
-  for (const x of s.players) delete x.flags.zhichi;
+  // 智迟的免疫只持续到该回合结束;义绝的技能压制同理
+  for (const x of s.players) {
+    delete x.flags.zhichi;
+    delete x.flags.yijueOff;
+  }
   // 放权:额外回合插在这里;结束后从刘禅的下一位继续
   if (s.extraTurn && !s.extraTurn.active) {
     const et = s.extraTurn;
@@ -56,6 +59,10 @@ export function nextTurn(ctx: Ctx): void {
     if (next.flipped) {
       next.flipped = false;
       emit(ctx, { type: 'flipped', player: next.id, flipped: false });
+      // 解围(界曹仁):武将牌翻至正面后,可移动场上的一张牌
+      if (hasSkill(s, next, 'jiewei')) {
+        s.stack.push({ type: 'qiaobian', step: 'move-start', player: next.id, phase: 'play' });
+      }
       continue;
     }
     s.turn = { activePlayer: next.id, phase: 'start', turnNumber: s.turn.turnNumber + 1 };
@@ -90,14 +97,24 @@ export function flowRun(ctx: Ctx): void {
           if (p.hp > p.maxHp) p.hp = p.maxHp;
           emit(ctx, { type: 'hpChanged', player: p.id, hp: p.hp, delta: 0 });
         }
+        // 勤学(界吕蒙,觉醒):手牌数-体力值达标则减 1 点体力上限,获得攻心
+        const qxGap = s.players.length >= 7 ? 2 : 3;
+        if (hasSkill(s, p, 'qinxue') && !(p.usedLimit ?? []).includes('qinxue')
+            && p.hand.length - p.hp >= qxGap) {
+          emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'qinxue' });
+          p.usedLimit = [...(p.usedLimit ?? []), 'qinxue'];
+          p.maxHp -= 1;
+          if (p.hp > p.maxHp) p.hp = p.maxHp;
+          emit(ctx, { type: 'hpChanged', player: p.id, hp: p.hp, delta: 0 });
+        }
         // 志继(觉醒,需选择回复或摸牌)
         if (hasSkill(s, p, 'zhiji') && !(p.usedLimit ?? []).includes('zhiji')
             && p.hand.length === 0) {
           pushFrame(ctx, { type: 'zhiji', step: 'wait', player: p.id });
         }
-        if (hasSkill(s, p, 'guanxing')) {
+        if (hasSkill(s, p, 'guanxing') || hasSkill(s, p, 'jguanxing')) {
           pushFrame(ctx, { type: 'guanxing', step: 'ask', player: p.id });
-        } else if (hasSkill(s, p, 'luoshen')) {
+        } else if (hasSkill(s, p, 'luoshen') || hasSkill(s, p, 'jluoshen')) {
           pushFrame(ctx, { type: 'luoshen', step: 'ask', player: p.id });
         } else if (hasSkill(s, p, 'yinghun') && p.hp < p.maxHp) {
           pushFrame(ctx, { type: 'yinghun', step: 'start', player: p.id });
@@ -152,15 +169,19 @@ export function flowRun(ctx: Ctx): void {
             type: 'phaseSkipped', player: p.id, phase: 'draw',
             reason: p.flags.skipJudge ? 'shensu' : 'bingliang',
           });
-        } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')
+        } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'jtuxi')
+            || hasSkill(s, p, 'luoyi') || hasSkill(s, p, 'jluoyi')
             || hasSkill(s, p, 'shuangxiong') || hasSkill(s, p, 'haoshi')
             || hasSkill(s, p, 'shelie')
             || (hasSkill(s, p, 'zaiqi') && p.hp < p.maxHp)) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
           let n = 2;
-          if (hasSkill(s, p, 'yingzi')) {
-            emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'yingzi' });
+          if (hasSkill(s, p, 'yingzi') || hasSkill(s, p, 'jyingzi')) {
+            emit(ctx, {
+              type: 'skillInvoked', player: p.id,
+              skill: hasSkill(s, p, 'jyingzi') ? 'jyingzi' : 'yingzi',
+            });
             n += 1;
           }
           drawCards(ctx, p.id, n);
@@ -201,6 +222,13 @@ export function flowRun(ctx: Ctx): void {
         setPhase(ctx, 'end');
         return;
       }
+      // 神速③(界夏侯渊):跳过弃牌阶段并翻面,视为使用一张杀
+      if (!p.flags._shensu3 && hasSkill(s, p, 'shensu3')
+          && p.hand.length > handLimit(s, p)) {
+        p.flags._shensu3 = true;
+        pushFrame(ctx, { type: 'shensu', step: 'wait', player: p.id, variant: 3 });
+        return;
+      }
       if (!p.flags._qbDiscard && hasSkill(s, p, 'qiaobian') && p.hand.length > 0
           && p.hand.length > handLimit(s, p)) {
         p.flags._qbDiscard = true;
@@ -228,9 +256,17 @@ export function flowRun(ctx: Ctx): void {
       // 据守:结束阶段可摸三张牌并翻面
       if (!p.flags._end) {
         p.flags._end = true;
-        if (hasSkill(s, p, 'jushou')) {
+        if (hasSkill(s, p, 'jushou') || hasSkill(s, p, 'jjushou')) {
           pushFrame(ctx, { type: 'jushou', step: 'wait', player: p.id });
           return;
+        }
+        // 奋激(界周泰):一名角色结束阶段没有手牌时,可失去 1 点体力令其摸两张
+        if (p.hand.length === 0) {
+          const zt = alivePlayers(s).find((x) => hasSkill(s, x, 'fenji') && x.hp >= 1);
+          if (zt) {
+            pushFrame(ctx, { type: 'fenji', step: 'wait', holder: zt.id, who: p.id });
+            return;
+          }
         }
         // 崩坏:结束阶段,若董卓不是体力值最小的角色
         if (hasSkill(s, p, 'benghuai')
@@ -248,6 +284,11 @@ export function flowRun(ctx: Ctx): void {
       if (hasSkill(s, p, 'biyue')) {
         emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'biyue' });
         drawCards(ctx, p.id, 1);
+      }
+      // 界闭月:结束阶段摸一张;没有手牌则摸两张
+      if (hasSkill(s, p, 'jbiyue')) {
+        emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jbiyue' });
+        drawCards(ctx, p.id, p.hand.length === 0 ? 2 : 1);
       }
       nextTurn(ctx);
       return;
@@ -589,7 +630,7 @@ function placeLebusishu(ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState
 
 function startSlash(
   ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[],
-  via: 'wusheng' | 'longdan' | 'zhangba' | undefined,
+  via: 'wusheng' | 'jwusheng' | 'longdan' | 'zhangba' | undefined,
   extraCardIds: number[] = [],
   element?: DamageElement,
 ): void {
@@ -616,8 +657,14 @@ function startSlash(
     if (t.id === p.id) fail('不能对自己使用杀');
     if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
     // 天义/陷阵拼点赢:本回合使用杀无距离限制
-    if (!p.flags.tianyiWin && !xianzhen
-        && distance(s, p.id, t.id) > attackRange(s, p)) {
+    // 界武圣:方块杀无距离限制;界咆哮:本回合用过杀后无距离限制
+    // 诈降:红杀无距离限制;界烈弓:距离不大于杀的点数即可
+    const noDist = p.flags.tianyiWin || xianzhen
+      || (via === 'jwusheng' && card(s, cardId).suit === 'diamond')
+      || (hasSkill(s, p, 'jpaoxiao') && !!p.flags.anySha)
+      || (p.flags.zhaxiang && isRed(card(s, cardId).suit))
+      || (hasSkill(s, p, 'jliegong') && distance(s, p.id, t.id) <= card(s, cardId).rank);
+    if (!noDist && distance(s, p.id, t.id) > attackRange(s, p)) {
       fail('目标超出攻击范围');
     }
   }
@@ -1125,6 +1172,134 @@ function useSkill(
       drawCards(ctx, p.id, 1);
       return;
     }
+    case 'jwusheng': {
+      // 界武圣:红色牌(手牌或装备)当杀;方块杀无距离限制
+      if (!hasSkill(s, p, 'jwusheng')) fail('你没有武圣技能');
+      if (cardIds.length !== 1) fail('武圣需要选择一张红色牌');
+      if (!p.hand.includes(cardIds[0]) && !equipCardIds(p).includes(cardIds[0])) fail('所选牌不属于你');
+      if (!isRed(card(s, cardIds[0]).suit)) fail('武圣需要红色牌');
+      startSlash(ctx, p, cardIds[0], targets, 'jwusheng');
+      return;
+    }
+    case 'yijue': {
+      // 义绝:弃一张牌,令一名有手牌的其他角色展示一张手牌
+      if (!hasSkill(s, p, 'yijue')) fail('你没有义绝技能');
+      if (p.flags.yijue) fail('义绝每回合限一次');
+      if (cardIds.length !== 1) fail('义绝需要弃置一张牌');
+      if (!p.hand.includes(cardIds[0]) && !equipCardIds(p).includes(cardIds[0])) fail('所选牌不属于你');
+      const t = requireTarget(ctx, p, targets);
+      if (t.hand.length === 0) fail('目标没有手牌');
+      p.flags.yijue = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'yijue' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      moveCard(ctx, cardIds[0], { zone: 'discard' }, 'yijue');
+      pushFrame(ctx, { type: 'yijue', step: 'show-wait', source: p.id, target: t.id });
+      return;
+    }
+    case 'jrende': {
+      // 界仁德:交给一名本阶段未获得过仁德牌的其他角色任意张手牌;
+      // 给出第二张时可视为使用一张基本牌
+      if (!hasSkill(s, p, 'jrende')) fail('你没有仁德技能');
+      if (cardIds.length === 0) fail('仁德需要至少选择一张手牌');
+      for (const id of cardIds) assertInHand(s, p, id);
+      if (new Set(cardIds).size !== cardIds.length) fail('不能重复选择同一张牌');
+      const t = requireTarget(ctx, p, targets);
+      if (p.flags[`rende${t.seat}`]) fail('界仁德:本阶段已给过该角色仁德牌');
+      p.flags[`rende${t.seat}`] = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jrende' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      moveCards(ctx, cardIds, { zone: 'hand', player: t.id }, 'rende');
+      const given = (typeof p.flags.rende === 'number' ? p.flags.rende : 0) + cardIds.length;
+      p.flags.rende = given;
+      if (given >= 2 && !p.flags.rendeUsed) {
+        p.flags.rendeUsed = true;
+        pushFrame(ctx, { type: 'jrende', step: 'wait', player: p.id });
+      }
+      return;
+    }
+    case 'jzhiheng': {
+      // 界制衡:弃任意张牌摸等量;若弃置了所有手牌,多摸一张
+      if (!hasSkill(s, p, 'jzhiheng')) fail('你没有制衡技能');
+      if (p.flags.zhiheng) fail('制衡每回合限一次');
+      if (cardIds.length === 0) fail('制衡需要至少弃置一张牌');
+      if (new Set(cardIds).size !== cardIds.length) fail('不能重复选择同一张牌');
+      for (const id of cardIds) {
+        if (!p.hand.includes(id) && !equipCardIds(p).includes(id)) fail('所选牌不属于你');
+      }
+      const allHand = p.hand.every((id) => cardIds.includes(id));
+      p.flags.zhiheng = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jzhiheng' });
+      moveCards(ctx, cardIds, { zone: 'discard' }, 'zhiheng');
+      drawCards(ctx, p.id, cardIds.length + (allHand ? 1 : 0));
+      return;
+    }
+    case 'jkurou': {
+      // 界苦肉:出牌阶段限一次,弃一张牌,然后失去 1 点体力(诈降摸三张)
+      if (!hasSkill(s, p, 'jkurou')) fail('你没有苦肉技能');
+      if (p.flags.jkurou) fail('苦肉每阶段限一次');
+      if (cardIds.length !== 1) fail('苦肉需要弃置一张牌');
+      if (!p.hand.includes(cardIds[0]) && !equipCardIds(p).includes(cardIds[0])) fail('所选牌不属于你');
+      p.flags.jkurou = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jkurou' });
+      moveCard(ctx, cardIds[0], { zone: 'discard' }, 'kurou');
+      loseHp(ctx, p.id, 1);
+      return;
+    }
+    case 'jfanjian': {
+      // 界反间:展示一张手牌交给一名其他角色,其选择展示手牌弃同花色或失去 1 点体力
+      if (!hasSkill(s, p, 'jfanjian')) fail('你没有反间技能');
+      if (p.flags.fanjian) fail('反间每回合限一次');
+      if (cardIds.length !== 1) fail('反间需要选择一张手牌');
+      assertInHand(s, p, cardIds[0]);
+      const t = requireTarget(ctx, p, targets);
+      p.flags.fanjian = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jfanjian' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      emit(ctx, { type: 'cardRevealed', player: p.id, cardId: cardIds[0], reason: 'jfanjian' });
+      const suit = card(s, cardIds[0]).suit;
+      moveCard(ctx, cardIds[0], { zone: 'hand', player: t.id }, 'jfanjian');
+      pushFrame(ctx, { type: 'jfanjian', step: 'wait', source: p.id, target: t.id, suit });
+      return;
+    }
+    case 'jguose': {
+      // 界国色:出牌阶段限一次,方块牌当乐不思蜀,然后摸一张牌(简化:不含弃置模式)
+      if (!hasSkill(s, p, 'jguose')) fail('你没有国色技能');
+      if (p.flags.guose) fail('国色每阶段限一次');
+      if (cardIds.length !== 1) fail('国色需要选择一张方块牌');
+      const cid = cardIds[0];
+      if (!p.hand.includes(cid) && !equipCardIds(p).includes(cid)) fail('所选牌不属于你');
+      if (card(s, cid).suit !== 'diamond') fail('国色需要方块牌');
+      const t = requireTarget(ctx, p, targets);
+      p.flags.guose = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jguose' });
+      placeLebusishu(ctx, p, cid, t);
+      drawCards(ctx, p.id, 1);
+      return;
+    }
+    case 'jqingnang': {
+      // 界青囊:出牌阶段每名角色限一次;弃黑色牌则本阶段青囊失效
+      if (!hasSkill(s, p, 'jqingnang')) fail('你没有青囊技能');
+      if (p.flags.qingnangOff) fail('本阶段弃置过黑色牌,青囊已失效');
+      if (cardIds.length !== 1) fail('青囊需要弃置一张手牌');
+      assertInHand(s, p, cardIds[0]);
+      const t = requireTarget(ctx, p, targets, true);
+      if (t.hp >= t.maxHp) fail('目标体力已满');
+      if (p.flags[`qn${t.seat}`]) fail('界青囊:本阶段已为该角色发动过');
+      p.flags[`qn${t.seat}`] = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jqingnang' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      if (isBlack(card(s, cardIds[0]).suit)) p.flags.qingnangOff = true;
+      moveCard(ctx, cardIds[0], { zone: 'discard' }, 'qingnang');
+      heal(ctx, t.id, 1);
+      return;
+    }
+    case 'qimou': {
+      // 奇谋(限定技):失去 X 点体力,本回合距离 -X 且可额外使用 X 张杀
+      if (!hasSkill(s, p, 'qimou')) fail('你没有奇谋技能');
+      if ((p.usedLimit ?? []).includes('qimou')) fail('奇谋是限定技,已发动过');
+      pushFrame(ctx, { type: 'qimou', step: 'wait', player: p.id });
+      return;
+    }
     case 'gongxin': {
       if (!hasSkill(s, p, 'gongxin')) fail('你没有攻心技能');
       if (p.flags.gongxin) fail('攻心每回合限一次');
@@ -1137,7 +1312,7 @@ function useSkill(
       return;
     }
     case 'guhuo': {
-      if (!hasSkill(s, p, 'guhuo')) fail('你没有蛊惑技能');
+      if (!hasSkill(s, p, 'guhuo') && !hasSkill(s, p, 'jguhuo')) fail('你没有蛊惑技能');
       if (!declare || !GUHUO_DECLARABLE.includes(declare)) {
         fail('蛊惑需要声明一种基本牌或非延时锦囊');
       }

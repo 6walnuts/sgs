@@ -35,6 +35,18 @@ export const GENERAL_NAMES: Record<string, string> = {
   chengong: '陈宫', gaoshun: '高顺',
   dengai: '邓艾', zhanghe: '张郃', jiangwei: '姜维', liushan: '刘禅',
   sunce: '孙策', zhangzhaozhanghong: '张昭张纮', zuoci: '左慈', caiwenji: '蔡文姬',
+  jiecaocao: '界曹操', jiesimayi: '界司马懿', jiexiahoudun: '界夏侯惇',
+  jiezhangliao: '界张辽', jiexuchu: '界许褚', jieguojia: '界郭嘉', jiezhenji: '界甄姬',
+  jieliubei: '界刘备', jieguanyu: '界关羽', jiezhangfei: '界张飞',
+  jiezhugeliang: '界诸葛亮', jiezhaoyun: '界赵云', jiemachao: '界马超',
+  jiehuangyueying: '界黄月英',
+  jiesunquan: '界孙权', jieganning: '界甘宁', jielvmeng: '界吕蒙',
+  jiehuanggai: '界黄盖', jiezhouyu: '界周瑜', jiedaqiao: '界大乔',
+  jieluxun: '界陆逊', jiesunshangxiang: '界孙尚香',
+  jiehuatuo: '界华佗', jielvbu: '界吕布', jiediaochan: '界貂蝉',
+  jiexiahouyuan: '界夏侯渊', jiecaoren: '界曹仁', jiehuangzhong: '界黄忠',
+  jieweiyan: '界魏延', jiexiaoqiao: '界小乔', jiezhoutai: '界周泰',
+  jiezhangjiao: '界张角', jieyuji: '界于吉',
   shenguanyu: '神关羽', shenlvmeng: '神吕蒙', shencaocao: '神曹操',
 };
 
@@ -75,6 +87,17 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   tiaoxin: '挑衅', zhiji: '志继', xiangle: '享乐', fangquan: '放权',
   jiang: '激昂', hunzi: '魂姿', zhijian: '直谏', guzheng: '固政',
   huashen: '化身', xinsheng: '新生', beige: '悲歌', duanchang: '断肠',
+  jjianxiong: '奸雄', jfankui: '反馈', jganglie: '刚烈', jtuxi: '突袭',
+  jluoyi: '裸衣', jluoshen: '洛神', jrende: '仁德', jwusheng: '武圣',
+  yijue: '义绝', jpaoxiao: '咆哮', jguanxing: '观星', yajiao: '涯角',
+  jtieji: '铁骑', jjizhi: '集智', jzhiheng: '制衡', fenwei: '奋威',
+  qinxue: '勤学', jkurou: '苦肉', zhaxiang: '诈降', jyingzi: '英姿',
+  jfanjian: '反间', jguose: '国色', jlianying: '连营',
+  jqingnang: '青囊', liyu: '利驭', jbiyue: '闭月',
+  shensu3: '神速', jjushou: '据守', jiewei: '解围', jliegong: '烈弓',
+  jkuanggu: '狂骨', qimou: '奇谋', jtianxiang: '天香', fenji: '奋激',
+  jleiji: '雷击', jguhuo: '蛊惑', chanyuan: '缠怨',
+  jxiaoji: '枭姬',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -113,6 +136,15 @@ export const SKILL_HINTS: Record<string, string> = {
   tiaoxin: '令攻击范围内含你的一名角色对你使用杀,否则你弃置其一张牌(每回合一次)',
   jixi: '将一张"田"当顺手牵羊使用(凿险觉醒后)',
   zhijian: '将手牌中的一张装备牌置入一名其他角色的装备区,然后摸一张牌',
+  jrende: '将任意张手牌交给一名本阶段未获得过仁德牌的其他角色;给出第二张时可视为使用一张基本牌',
+  jwusheng: '将一张红色牌当杀使用或打出;方块杀无距离限制',
+  yijue: '弃一张牌令一名角色展示一张手牌:黑色则其本回合技能失效;红色则你获得之并可令其回复1点体力(每回合一次)',
+  jzhiheng: '弃任意张牌摸等量的牌;若弃置了所有手牌,额外多摸一张(每回合一次)',
+  jkurou: '弃一张牌,然后失去1点体力(诈降:失去体力后摸三张,出牌阶段红杀强化)(每阶段一次)',
+  jfanjian: '展示一张手牌并交给一名其他角色,其选择:展示所有手牌并弃置同花色牌,或失去1点体力(每回合一次)',
+  jguose: '将一张方块牌当乐不思蜀使用,然后摸一张牌(每阶段一次)',
+  jqingnang: '弃一张手牌令一名已受伤角色回复1点体力(每名角色限一次;弃黑色牌则本阶段失效)',
+  qimou: '限定技:失去X点体力,本回合计算距离-X且可额外使用X张杀',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -339,6 +371,14 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '放权:弃置一张手牌,令一名其他角色获得一个额外回合';
         case 'guzheng':
           return '固政:选择一张返还给弃牌的角色,其余弃牌归你';
+        case 'yijue':
+          return '义绝:请展示一张手牌(黑色:本回合技能失效;红色:被其获得,可回复1点体力)';
+        case 'jtieji': {
+          const suit = req.reason.suit ? SUIT_SYMBOLS[req.reason.suit] : '';
+          return `界铁骑:弃置一张 ${suit} 花色的牌,否则不能使用闪`;
+        }
+        case 'jjushou':
+          return '据守:弃置一张手牌,然后翻面';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -393,6 +433,16 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'fangquan': return '是否发动【放权】跳过出牌阶段?(结束阶段可弃一张手牌令他人获得额外回合)';
         case 'guzheng': return '是否发动【固政】?(将其此阶段弃置的牌返还一张,其余归你)';
         case 'huashen': return '化身:声明获得一张化身牌上的技能(至回合结束)';
+        case 'jrende': return '界仁德:本阶段给出了第二张仁德牌,可视为使用一张基本牌';
+        case 'yijue-heal': return '义绝:是否令其回复1点体力?';
+        case 'jfanjian': return '界反间:展示所有手牌并弃置与其交来的牌同花色的牌,或失去1点体力';
+        case 'fenwei': return '是否发动【奋威】?(限定技:令此群体锦囊对任意名目标无效)';
+        case 'shensu3': return '是否发动【神速】跳过弃牌阶段并翻面,视为使用一张杀?';
+        case 'liyu': return '是否发动【利驭】获得其一张牌?(非装备则其摸一张;装备则其指定角色与你决斗)';
+        case 'qimou': return '奇谋(限定技):失去X点体力,本回合距离-X且可额外使用X张杀';
+        case 'fenji': return '是否发动【奋激】失去1点体力,令没有手牌的该角色摸两张牌?';
+        case 'jjizhi': return '集智:摸到的是基本牌,是否弃置之令本回合手牌上限+1?';
+        case 'jtianxiang-mode': return '界天香:令其受到转移的伤害并摸牌,或令其失去1点体力并获得你弃置的红桃';
       }
       return '';
     case 'choose-player':
@@ -409,12 +459,16 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'xuanfeng': return '旋风:选择目标角色';
         case 'haoshi': return '好施:选择获得这些牌的角色(手牌最少者)';
         case 'luanwu': return '乱武:选择距离最近的一名角色作为杀的目标';
+        case 'jlianying': return '界连营:选择摸牌的角色(每人一张)';
+        case 'fenwei': return '奋威:选择要豁免此群体锦囊的角色';
+        case 'liyu': return '利驭:选择与其决斗的角色';
         default: return '请选择目标角色';
       }
     case 'arrange-cards':
       return '观星:调整牌堆顶的牌(上方为牌堆顶,按顺序摸取;移到下方则放到牌堆底)';
     case 'pick-card': {
       if (req.reason === 'qiaobian') return `巧变:选择要移动的 ${label(req.target)} 场上的一张牌`;
+      if (req.reason === 'liyu') return `利驭:选择要获得的 ${label(req.target)} 的一张牌`;
       const what = req.reason === 'guohe' || req.reason === 'mengjin' || req.reason === 'tiaoxin'
         ? '弃置' : '获得';
       return `选择要${what}的 ${label(req.target)} 的一张牌`;
@@ -479,6 +533,24 @@ export const OPTION_LABELS: Record<string, string> = {
   'gongxin-discard': '弃置之',
   'gongxin-top': '置于牌堆顶',
   tuntian: '发动屯田',
+  'jrende-sha': '视为使用杀',
+  'jrende-tao': '视为使用桃',
+  'jrende-jiu': '视为使用酒',
+  'yijue-heal': '令其回复1点体力',
+  'jfanjian-show': '展示手牌弃同花色',
+  'jfanjian-hp': '失去1点体力',
+  fenwei: '发动奋威',
+  shensu3: '发动神速',
+  liyu: '发动利驭',
+  'qimou-1': '失去1点体力',
+  'qimou-2': '失去2点体力',
+  'qimou-3': '失去3点体力',
+  fenji: '发动奋激',
+  jjizhi: '弃置并+1手牌上限',
+  'jtx-damage': '令其受此伤害并摸牌',
+  'jtx-losehp': '令其失去1点体力得此牌',
+  'kuanggu-heal': '回复1点体力',
+  'kuanggu-draw': '摸一张牌',
   'zhiji-heal': '回复1点体力',
   'zhiji-draw': '摸两张牌',
   fangquan: '发动放权',

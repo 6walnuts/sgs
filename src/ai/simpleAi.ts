@@ -23,6 +23,13 @@ function hasGeneralSkill(p: PlayerState, skill: string): boolean {
   return GENERALS[p.general].skills.includes(skill as never);
 }
 
+// 界限突破武将拥有 j 前缀的同名技能;返回实际持有的技能名(供 use-skill 提交)
+function skillVariant(p: PlayerState, base: string): string | null {
+  if (hasGeneralSkill(p, base)) return base;
+  if (hasGeneralSkill(p, 'j' + base)) return 'j' + base;
+  return null;
+}
+
 function isEnemy(s: GameState, myRole: Role, other: PlayerState): boolean {
   const rebelsAlive = s.players.some((p) => p.alive && p.role === 'rebel');
   switch (myRole) {
@@ -145,14 +152,19 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   if (wz.length > 0) return { kind: 'play-card', cardId: wz[0], targets: [] };
 
   // 4. 制衡废牌
-  if (hasGeneralSkill(p, 'zhiheng') && !p.flags.zhiheng) {
+  const zh = skillVariant(p, 'zhiheng');
+  if (zh && !p.flags.zhiheng) {
     const junk = junkCards(s, p).filter((id) => card(s, id).name !== 'sha' || handOf(s, p, 'sha').length > 2);
-    if (junk.length > 0) return { kind: 'use-skill', skill: 'zhiheng', cardIds: junk };
+    if (junk.length > 0) return { kind: 'use-skill', skill: zh as never, cardIds: junk };
   }
 
-  // 5. 苦肉:体力充裕时换牌
+  // 5. 苦肉:体力充裕时换牌(界苦肉需弃一张牌)
   if (hasGeneralSkill(p, 'kurou') && p.hp >= 3) {
     return { kind: 'use-skill', skill: 'kurou' };
+  }
+  if (hasGeneralSkill(p, 'jkurou') && !p.flags.jkurou && p.hp >= 3) {
+    const junk = junkCards(s, p);
+    if (junk.length > 0) return { kind: 'use-skill', skill: 'jkurou', cardIds: [junk[0]] };
   }
 
   // 6. 乐不思蜀 / 国色
@@ -164,10 +176,11 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   if (le.length > 0 && leTarget) {
     return { kind: 'play-card', cardId: le[0], targets: [leTarget.id] };
   }
-  if (hasGeneralSkill(p, 'guose') && leTarget) {
+  const gs = skillVariant(p, 'guose');
+  if (gs && leTarget && !(gs === 'jguose' && p.flags.guose)) {
     const diamond = p.hand.find((id) => card(s, id).suit === 'diamond' && keepScore(s, p, id) <= 45);
     if (diamond !== undefined) {
-      return { kind: 'use-skill', skill: 'guose', cardIds: [diamond], targets: [leTarget.id] };
+      return { kind: 'use-skill', skill: gs as never, cardIds: [diamond], targets: [leTarget.id] };
     }
   }
 
@@ -205,6 +218,17 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
       return { kind: 'use-skill', skill: 'qingnang', cardIds: [worst], targets: [hurt.id] };
     }
   }
+  if (hasGeneralSkill(p, 'jqingnang') && !p.flags.qingnangOff && p.hand.length > 0) {
+    const hurt = [...allies, p]
+      .filter((x) => x.hp < x.maxHp && !p.flags[`qn${x.seat}`])
+      .sort((a, b) => a.hp - b.hp)[0];
+    if (hurt) {
+      // 界青囊:优先弃红色牌,黑色牌会让本阶段青囊失效
+      const red = sortByScoreAsc(s, p, p.hand).find((id) => isRed(card(s, id).suit));
+      const worst = red ?? sortByScoreAsc(s, p, p.hand)[0];
+      return { kind: 'use-skill', skill: 'jqingnang', cardIds: [worst], targets: [hurt.id] };
+    }
+  }
 
   // 11. 结姻:救受伤的男性队友
   if (hasGeneralSkill(p, 'jieyin') && !p.flags.jieyin && p.hand.length >= 4) {
@@ -238,6 +262,17 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
       if (junk.length >= 2 - given) {
         const t = allies.sort((a, b) => a.hand.length - b.hand.length)[0];
         return { kind: 'use-skill', skill: 'rende', cardIds: junk, targets: [t.id] };
+      }
+    }
+  }
+  // 界仁德:一次给清两张废牌(触发视为使用基本牌)
+  if (hasGeneralSkill(p, 'jrende') && p.hp < p.maxHp && allies.length > 0) {
+    const given = typeof p.flags.rende === 'number' ? p.flags.rende : 0;
+    if (given < 2) {
+      const junk = junkCards(s, p).slice(0, 2);
+      const t = allies.find((a) => !p.flags[`rende${a.seat}`]);
+      if (junk.length >= 2 && t) {
+        return { kind: 'use-skill', skill: 'jrende', cardIds: junk, targets: [t.id] };
       }
     }
   }
@@ -289,10 +324,11 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
       if (sha.length > 0) {
         return { kind: 'play-card', cardId: sha[0], targets: [inRange[0].id] };
       }
-      if (hasGeneralSkill(p, 'wusheng')) {
+      const ws = skillVariant(p, 'wusheng');
+      if (ws) {
         const red = p.hand.find((id) => isRed(card(s, id).suit) && keepScore(s, p, id) <= 55);
         if (red !== undefined) {
-          return { kind: 'use-skill', skill: 'wusheng', cardIds: [red], targets: [inRange[0].id] };
+          return { kind: 'use-skill', skill: ws as never, cardIds: [red], targets: [inRange[0].id] };
         }
       }
       if (hasGeneralSkill(p, 'longdan')) {
@@ -380,6 +416,10 @@ function decideRespondCard(
       if (hasGeneralSkill(p, 'wusheng')) {
         const red = p.hand.find((id) => isRed(card(s, id).suit));
         if (red !== undefined) return { kind: 'card', cardId: red, skill: 'wusheng' };
+      }
+      if (hasGeneralSkill(p, 'jwusheng')) {
+        const red = p.hand.find((id) => isRed(card(s, id).suit));
+        if (red !== undefined) return { kind: 'card', cardId: red, skill: 'jwusheng' };
       }
       if (hasGeneralSkill(p, 'longdan')) {
         const shan = handOf(s, p, 'shan');
@@ -513,6 +553,34 @@ function decideOption(
       return { kind: 'option', index: 0 }; // 白拿弃牌
     case 'huashen':
       return { kind: 'option', index: 0 };
+    case 'jrende':
+      // 界仁德触发:受伤则视为用桃,否则放弃
+      return p.hp < p.maxHp ? { kind: 'option', index: 1 } : { kind: 'decline' };
+    case 'yijue-heal':
+      return { kind: 'decline' }; // 义绝目标通常是敌人,不给回血
+    case 'jfanjian':
+      // 体力充裕时宁可掉血保手牌,残血时展示弃同花色
+      return p.hp > 2 ? { kind: 'option', index: 1 } : { kind: 'option', index: 0 };
+    case 'fenwei':
+      return { kind: 'option', index: 0 };
+    case 'shensu3':
+      return { kind: 'decline' }; // 翻面代价大,AI 不发动
+    case 'liyu':
+      return { kind: 'option', index: 0 };
+    case 'qimou':
+      return { kind: 'decline' }; // 简化:AI 不用奇谋
+    case 'fenji': {
+      // 奋激:结束回合者是队友才发动
+      const ff = s.stack.find((f) => f.type === 'fenji') as { who: PlayerId } | undefined;
+      if (ff && !isEnemy(s, p.role, player(s, ff.who)) && p.hp > 1) {
+        return { kind: 'option', index: 0 };
+      }
+      return { kind: 'decline' };
+    }
+    case 'jjizhi':
+      return { kind: 'decline' }; // 简化:基本牌留在手里
+    case 'jtianxiang-mode':
+      return { kind: 'option', index: 0 };
     case 'benghuai':
       // 体力充裕时掉体力,残血时掉上限
       return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
@@ -609,6 +677,13 @@ function decideChooseCards(
     case 'qiaobian':
     case 'fangquan':
       return { kind: 'decline' }; // 简化:AI 不发动巧变/放权
+    case 'jtieji': {
+      // 界铁骑:有同花色的低价值牌就弃,否则认栽(不能闪)
+      const match = sortByScoreAsc(s, p, p.hand)
+        .filter((id) => card(s, id).suit === req.reason.suit && keepScore(s, p, id) <= 45);
+      if (match.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [match[0]] };
+    }
     case 'guzheng': {
       // 固政:把最没用的一张还回去,好牌留下
       const shown = req.shownIds ?? [];
@@ -701,6 +776,27 @@ function decideChoosePlayer(
     case 'xuanhuo': {
       const ally = cands.find((x) => !isEnemy(s, p.role, x));
       return { kind: 'players', players: [(ally ?? cands[0]).id] };
+    }
+    case 'jlianying': {
+      // 界连营:摸牌给自己和队友
+      const mine = [p, ...cands.filter((x) => x.id !== p.id && !isEnemy(s, p.role, x))]
+        .filter((x) => cands.some((c) => c.id === x.id) || x.id === p.id)
+        .slice(0, req.max)
+        .map((x) => x.id)
+        .filter((id) => req.candidates.includes(id));
+      if (mine.length > 0) return { kind: 'players', players: mine };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'fenwei': {
+      // 奋威:豁免自己与队友
+      const keep = cands.filter((x) => x.id === p.id || !isEnemy(s, p.role, x)).map((x) => x.id);
+      if (keep.length > 0) return { kind: 'players', players: keep };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'liyu': {
+      // 利驭:把决斗引向敌人
+      const t = enemies[0] ?? cands[0];
+      return { kind: 'players', players: [t.id] };
     }
     default: {
       if (req.canDecline) return { kind: 'decline' };

@@ -59,6 +59,9 @@ export function orderFrom(s: GameState, start?: PlayerId): PlayerId[] {
 export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boolean {
   if (!p.alive) return false;
   if (p.skillsLost) return false; // 断肠:失去所有武将技能
+  if (p.flags.yijueOff) return false; // 义绝亮黑:本回合技能失效
+  // 缠怨:体力为 1 时其他技能失效
+  if ((p.usedLimit ?? []).includes('chanyuan') && p.hp === 1) return false;
   const def = GENERALS[p.general];
   const awakened = p.usedLimit ?? [];
   let owns = def.skills.includes(skill);
@@ -68,6 +71,8 @@ export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boole
     else if (skill === 'guanxing' && def.skills.includes('zhiji') && awakened.includes('zhiji')) owns = true;
     else if ((skill === 'yingzi' || skill === 'yinghun')
         && def.skills.includes('hunzi') && awakened.includes('hunzi')) owns = true;
+    // 勤学(界吕蒙):觉醒后获得攻心
+    else if (skill === 'gongxin' && def.skills.includes('qinxue') && awakened.includes('qinxue')) owns = true;
     // 化身:左慈声明获得的技能
     else if (def.skills.includes('huashen') && p.huashenSkill === skill) owns = true;
   }
@@ -174,12 +179,14 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
   const from = findZone(s, ids[0]);
   // 记录移动前的手牌/装备归属,用于连营、枭姬触发
   const handOwners = new Map<PlayerId, number>();
+  const handLost = new Map<PlayerId, number>(); // 每人失去的手牌数
   const equipLoss = new Map<PlayerId, number>();
   const baiyinLosers: PlayerId[] = [];
   for (const id of ids) {
     const z = findZone(s, id);
     if (z.zone === 'hand' && z.player) {
       handOwners.set(z.player, player(s, z.player).hand.length);
+      handLost.set(z.player, (handLost.get(z.player) ?? 0) + 1);
     }
     if (z.zone === 'equip' && z.player && !(to.zone === 'equip' && to.player === z.player)) {
       equipLoss.set(z.player, (equipLoss.get(z.player) ?? 0) + 1);
@@ -196,6 +203,30 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
         && !(to.zone === 'hand' && to.player === pid)) {
       emit(ctx, { type: 'skillInvoked', player: pid, skill: 'lianying' });
       drawCards(ctx, pid, 1);
+    }
+    // 界连营:失去最后手牌后,令至多 X 名角色各摸一张(X=失去的牌数,插到栈底)
+    if (p.hand.length === 0 && p.alive && hasSkill(s, p, 'jlianying')
+        && !(to.zone === 'hand' && to.player === pid)) {
+      s.stack.unshift({ type: 'jlianying', step: 'wait', player: pid, count: handLost.get(pid) ?? 1 });
+    }
+  }
+  // 涯角(界赵云):回合外使用/打出手牌后,亮出牌堆顶一张,同类别则获得,否则弃置
+  if (reason === 'play' || reason === 'respond') {
+    for (const [pid] of handLost) {
+      const p = player(s, pid);
+      if (p.alive && s.turn.activePlayer !== pid && hasSkill(s, p, 'yajiao')
+          && s.drawPile.length > 0) {
+        const top = s.drawPile.shift()!;
+        emit(ctx, { type: 'skillInvoked', player: pid, skill: 'yajiao' });
+        emit(ctx, { type: 'cardRevealed', player: pid, cardId: top, reason: 'yajiao' });
+        if (cardCategory(s, top) === cardCategory(s, ids[0])) {
+          s.players.find((x) => x.id === pid)!.hand.push(top);
+          emit(ctx, { type: 'cardsMoved', cardIds: [top], from: { zone: 'draw' }, to: { zone: 'hand', player: pid }, reason: 'yajiao' });
+        } else {
+          s.discardPile.push(top);
+          emit(ctx, { type: 'cardsMoved', cardIds: [top], from: { zone: 'draw' }, to: { zone: 'discard' }, reason: 'yajiao' });
+        }
+      }
     }
   }
   // 枭姬:每失去一张装备区的牌摸两张
@@ -307,6 +338,14 @@ export function flipToProcessing(ctx: Ctx): CardId {
   return id;
 }
 
+// 牌的类别:基本牌/装备牌/锦囊牌(涯角同类别判断用)
+export function cardCategory(s: GameState, id: CardId): 'basic' | 'equip' | 'trick' {
+  const name = card(s, id).name;
+  if (['sha', 'huosha', 'leisha', 'shan', 'tao', 'jiu'].includes(name)) return 'basic';
+  if (equipSlotOf(name) !== null) return 'equip';
+  return 'trick';
+}
+
 export function pickRandomHand(ctx: Ctx, p: PlayerState): CardId {
   if (p.hand.length === 0) fail(`${p.id} 没有手牌`);
   return p.hand[randInt(ctx.s, p.hand.length)];
@@ -364,6 +403,16 @@ export function loseHp(ctx: Ctx, pid: PlayerId, n: number): void {
   const p = player(ctx.s, pid);
   p.hp -= n;
   emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta: -n });
+  // 诈降(界黄盖):每失去 1 点体力摸三张牌;在自己出牌阶段则强化本阶段的红杀
+  if (hasSkill(ctx.s, p, 'zhaxiang')) {
+    for (let i = 0; i < n; i++) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'zhaxiang' });
+      drawCards(ctx, pid, 3);
+    }
+    if (ctx.s.turn.activePlayer === pid && ctx.s.turn.phase === 'play') {
+      p.flags.zhaxiang = Number(p.flags.zhaxiang ?? 0) + n;
+    }
+  }
   maybeShangshi(ctx, pid);
   if (p.hp <= 0 && p.alive) {
     pushFrame(ctx, {

@@ -17,7 +17,9 @@ type ActiveSkill =
   | 'duanliang' | 'dimeng' | 'jiuchi' | 'luanwu'
   | 'jiushi' | 'xuanhuo' | 'xinzhan' | 'jujian' | 'ganlu' | 'mingce' | 'xianzhen'
   | 'gongxin'
-  | 'tiaoxin' | 'jixi' | 'zhijian';
+  | 'tiaoxin' | 'jixi' | 'zhijian'
+  | 'jrende' | 'jwusheng' | 'yijue' | 'jzhiheng' | 'jkurou' | 'jfanjian'
+  | 'jguose' | 'jqingnang' | 'qimou';
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -45,7 +47,10 @@ function targetsNeeded(
     switch (skill) {
       case 'lijian': return [2, 2];
       case 'zhiheng': return [0, 0];
+      case 'jzhiheng': return [0, 0];
       case 'kurou': return [0, 0];
+      case 'jkurou': return [0, 0];
+      case 'qimou': return [0, 0];
       case 'lianhuan': return [0, 2]; // 0 = 重铸
       case 'luanji': return [0, 0];
       case 'jiuchi': return [0, 0];
@@ -74,7 +79,10 @@ function targetsNeeded(
 function cardsNeeded(skill: ActiveSkill): [number, number] {
   switch (skill) {
     case 'rende': return [1, 99];
+    case 'jrende': return [1, 99];
     case 'zhiheng': return [1, 99];
+    case 'jzhiheng': return [1, 99];
+    case 'qimou': return [0, 0];
     case 'jieyin': return [2, 2];
     case 'zhangba': return [2, 2];
     case 'luanji': return [2, 2];
@@ -110,7 +118,8 @@ function confirmLabel(
 }
 
 function multiSelect(skill: ActiveSkill | null): boolean {
-  return skill === 'rende' || skill === 'zhiheng' || skill === 'jieyin'
+  return skill === 'rende' || skill === 'jrende'
+    || skill === 'zhiheng' || skill === 'jzhiheng' || skill === 'jieyin'
     || skill === 'zhangba' || skill === 'luanji' || skill === 'dimeng'
     || skill === 'jujian';
 }
@@ -302,12 +311,22 @@ export function GameBoard({
       case 'ganlu': return !!human.flags.ganlu;
       case 'mingce': return !!human.flags.mingce;
       case 'xianzhen': return !!human.flags.xianzhenUsed;
-      case 'gongxin': return !!human.flags.gongxin;
+      case 'gongxin':
+        return !!human.flags.gongxin
+          || (GENERALS[human.general].skills.includes('qinxue')
+            && !(human.usedLimit ?? []).includes('qinxue'));
       case 'jiushi': return !!human.flags.jiuUsed || !!human.flipped;
       case 'shuangxiong': return typeof human.flags.shuangxiong !== 'number';
       case 'tiaoxin': return !!human.flags.tiaoxin;
       case 'jixi':
         return !(human.usedLimit ?? []).includes('zaoxian') || (human.tian?.length ?? 0) === 0;
+      case 'jzhiheng': return !!human.flags.zhiheng;
+      case 'jkurou': return !!human.flags.jkurou;
+      case 'jfanjian': return !!human.flags.fanjian;
+      case 'jguose': return !!human.flags.guose;
+      case 'yijue': return !!human.flags.yijue;
+      case 'jqingnang': return !!human.flags.qingnangOff;
+      case 'qimou': return (human.usedLimit ?? []).includes('qimou');
       default: return false;
     }
   };
@@ -400,9 +419,12 @@ export function GameBoard({
             targeted={selTargets.includes(humanId)}
             selectedCards={selCards}
             onEquipClick={
-              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian'
-                || selSkill === 'guose' || selSkill === 'qiangxi' || selSkill === 'dimeng'
-                || selSkill === 'jujian' || selSkill === 'mingce')
+              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'jzhiheng'
+                || selSkill === 'lijian'
+                || selSkill === 'guose' || selSkill === 'jguose'
+                || selSkill === 'qiangxi' || selSkill === 'dimeng'
+                || selSkill === 'jujian' || selSkill === 'mingce'
+                || selSkill === 'jkurou' || selSkill === 'yijue' || selSkill === 'jwusheng')
                 ? toggleCard
                 : undefined
             }

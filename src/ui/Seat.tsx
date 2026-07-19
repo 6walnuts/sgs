@@ -48,9 +48,10 @@ export function Seat({
           : <GeneralPortrait general={p.general} />}
         <div className="seat-col">
           <div className="seat-skills">
-            {!p.unpicked && GENERALS[p.general].skills.map((sk) => (
-              <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
-            ))}
+            {!p.unpicked && [...new Set(GENERALS[p.general].skills.map((sk) => SKILL_NAMES[sk]))]
+              .map((name) => (
+                <span key={name} className="skill-tag">{name}</span>
+              ))}
             {p.huashenSkill && (
               <span className="skill-tag">化:{SKILL_NAMES[p.huashenSkill]}</span>
             )}

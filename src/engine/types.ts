@@ -56,7 +56,17 @@ export type GeneralId =
   | 'shenguanyu' | 'shenlvmeng' | 'shencaocao'
   // 山包
   | 'dengai' | 'zhanghe' | 'jiangwei' | 'liushan'
-  | 'sunce' | 'zhangzhaozhanghong' | 'zuoci' | 'caiwenji';
+  | 'sunce' | 'zhangzhaozhanghong' | 'zuoci' | 'caiwenji'
+  // 界限突破(标准 25 将 + 风 8 将,独立武将与原版共存)
+  | 'jiecaocao' | 'jiesimayi' | 'jiexiahoudun' | 'jiezhangliao' | 'jiexuchu'
+  | 'jieguojia' | 'jiezhenji'
+  | 'jieliubei' | 'jieguanyu' | 'jiezhangfei' | 'jiezhugeliang' | 'jiezhaoyun'
+  | 'jiemachao' | 'jiehuangyueying'
+  | 'jiesunquan' | 'jieganning' | 'jielvmeng' | 'jiehuanggai' | 'jiezhouyu'
+  | 'jiedaqiao' | 'jieluxun' | 'jiesunshangxiang'
+  | 'jiehuatuo' | 'jielvbu' | 'jiediaochan'
+  | 'jiexiahouyuan' | 'jiecaoren' | 'jiehuangzhong' | 'jieweiyan'
+  | 'jiexiaoqiao' | 'jiezhoutai' | 'jiezhangjiao' | 'jieyuji';
 
 export type SkillName =
   | 'rende' | 'wusheng' | 'jianxiong' | 'fankui' | 'guicai'
@@ -88,7 +98,16 @@ export type SkillName =
   | 'wushen' | 'wuhun' | 'shelie' | 'gongxin' | 'guixin' | 'feiying'
   | 'tuntian' | 'zaoxian' | 'jixi' | 'qiaobian' | 'tiaoxin' | 'zhiji'
   | 'xiangle' | 'fangquan' | 'jiang' | 'hunzi'
-  | 'zhijian' | 'guzheng' | 'huashen' | 'xinsheng' | 'beige' | 'duanchang';
+  | 'zhijian' | 'guzheng' | 'huashen' | 'xinsheng' | 'beige' | 'duanchang'
+  // 界限突破(j 前缀 = 对应原技能的界版;新技能用原名)
+  | 'jjianxiong' | 'jfankui' | 'jganglie' | 'jtuxi' | 'jluoyi' | 'jluoshen'
+  | 'jrende' | 'jwusheng' | 'yijue' | 'jpaoxiao' | 'jguanxing' | 'yajiao'
+  | 'jtieji' | 'jjizhi'
+  | 'jzhiheng' | 'fenwei' | 'qinxue' | 'jkurou' | 'zhaxiang' | 'jyingzi'
+  | 'jfanjian' | 'jguose' | 'jlianying' | 'jxiaoji'
+  | 'jqingnang' | 'liyu' | 'jbiyue'
+  | 'shensu3' | 'jjushou' | 'jiewei' | 'jliegong' | 'jkuanggu' | 'qimou'
+  | 'jtianxiang' | 'fenji' | 'jleiji' | 'jguhuo' | 'chanyuan';
 
 export interface PlayerState {
   id: PlayerId;
@@ -127,7 +146,7 @@ export interface ZoneRef {
 export interface SlashFrame {
   type: 'slash';
   step: 'start' | 'liuli-wait' | 'liuli-cards' | 'liuli-player'
-      | 'tieji' | 'tieji-wait' | 'tieji-judged'
+      | 'tieji' | 'tieji-wait' | 'tieji-judged' | 'jtieji-discard'
       | 'liegong-wait'
       | 'cixiong' | 'cixiong-wait' | 'cixiong-discard'
       | 'cycle' | 'bagua-wait' | 'bagua-judged' | 'ask-shan' | 'shan-wait'
@@ -146,6 +165,8 @@ export interface SlashFrame {
   noSuit?: boolean;        // 丈八的杀无花色(仁王盾不生效)
   element?: DamageElement; // 火杀/雷杀/朱雀羽扇转化
   jiuBonus?: boolean;      // 酒:此杀伤害 +1
+  lgPlus?: boolean;        // 界烈弓:目标体力不小于你,伤害 +1
+  jtjSuit?: string;        // 界铁骑:判定花色,目标需弃同花色牌否则不能闪
   zqAsked?: boolean;       // 朱雀羽扇已询问
   dodgesNeeded?: number;   // 无双 = 2
   dodgesGot?: number;
@@ -172,7 +193,8 @@ export interface DamageFrame {
       | 'baonve-wait' | 'baonve-judged'
       | 'enyuan-card' | 'pojun-wait' | 'guixin-wait'
       | 'beige-card' | 'beige-judged'
-      | 'yiji-wait' | 'yiji-cards' | 'yiji-player';
+      | 'yiji-wait' | 'yiji-cards' | 'yiji-player'
+      | 'jtianxiang-mode' | 'liyu-wait' | 'liyu-pick' | 'liyu-player';
   source: PlayerId | null;
   target: PlayerId;
   amount: number;
@@ -183,6 +205,11 @@ export interface DamageFrame {
   spreadTo?: PlayerId[];    // 结算完毕后需传导的连环角色
   jxAsked?: boolean;
   fkAsked?: boolean;
+  fkTimes?: number;        // 界反馈:每点伤害触发一次
+  glTimes?: number;        // 界刚烈:每点伤害触发一次
+  lyAsked?: boolean;       // 利驭已询问
+  lyCard?: CardId;         // 利驭拿到的牌
+  txTarget?: PlayerId;     // 界天香选定的转移目标
   glAsked?: boolean;
   kgAsked?: boolean;       // 狂骨已询问
   txAsked?: boolean;       // 天香已询问
@@ -305,8 +332,11 @@ export interface FanjianFrame {
 // AOE 锦囊:南蛮入侵/万箭齐发/桃园结义/五谷丰登,逐目标结算(每个目标可被无懈)
 export interface AoeFrame {
   type: 'aoe';
-  step: 'next' | 'after-wuxie' | 'card-wait' | 'pick-wait';
+  step: 'next' | 'after-wuxie' | 'card-wait' | 'pick-wait'
+      | 'fenwei-wait' | 'fenwei-players';
   effName: 'nanman' | 'wanjian' | 'taoyuan' | 'wugu';
+  fwAsked?: boolean;   // 奋威已询问
+  fwWho?: PlayerId;    // 被询问奋威的甘宁
   cardId: CardId;
   source: PlayerId;
   queue: PlayerId[];
@@ -340,7 +370,7 @@ export interface ShensuFrame {
   type: 'shensu';
   step: 'wait' | 'equip-wait' | 'target-wait';
   player: PlayerId;
-  variant: 1 | 2; // 1=跳过判定+摸牌;2=跳过出牌并弃一张装备
+  variant: 1 | 2 | 3; // 1=跳过判定+摸牌;2=跳过出牌并弃一张装备;3=跳过弃牌并翻面(界)
 }
 
 export interface LeijiFrame {
@@ -365,7 +395,7 @@ export interface GuhuoFrame {
 
 export interface JushouFrame {
   type: 'jushou';
-  step: 'wait';
+  step: 'wait' | 'discard-wait';
   player: PlayerId;
 }
 
@@ -408,7 +438,7 @@ export interface TuntianFrame {
 // 巧变(张郃):弃一张手牌跳过一个阶段(摸牌改为拿牌,出牌改为移动场上牌)
 export interface QiaobianFrame {
   type: 'qiaobian';
-  step: 'ask' | 'draw-players' | 'move-src' | 'move-pick' | 'move-dest';
+  step: 'ask' | 'move-start' | 'draw-players' | 'move-src' | 'move-pick' | 'move-dest';
   player: PlayerId;
   phase: 'judge' | 'draw' | 'play' | 'discard';
   moveFrom?: PlayerId;
@@ -539,6 +569,53 @@ export interface LuanwuFrame {
   pendingCard?: CardId; // 已打出待选目标的杀
 }
 
+// 界仁德(界刘备):本回合给出第二张仁德牌时,可视为使用一张基本牌
+export interface JrendeFrame {
+  type: 'jrende';
+  step: 'wait' | 'sha-player';
+  player: PlayerId;
+}
+
+// 义绝(界关羽):弃一张牌令一名角色展示一张手牌,黑色则其技能失效,红色则获得之
+export interface YijueFrame {
+  type: 'yijue';
+  step: 'show-wait' | 'heal-wait';
+  source: PlayerId;
+  target: PlayerId;
+}
+
+// 界反间(界周瑜):交给其他角色一张手牌,其展示手牌弃同花色或失去 1 点体力
+export interface JfanjianFrame {
+  type: 'jfanjian';
+  step: 'wait';
+  source: PlayerId;
+  target: PlayerId;
+  suit: Suit;
+}
+
+// 界连营(界陆逊):失去最后手牌后,令至多 X 名角色各摸一张(X=失去的牌数)
+export interface JlianyingFrame {
+  type: 'jlianying';
+  step: 'wait';
+  player: PlayerId;
+  count: number;
+}
+
+// 奋激(界周泰):一名角色结束阶段没有手牌时,可失去 1 点体力令其摸两张
+export interface FenjiFrame {
+  type: 'fenji';
+  step: 'wait';
+  holder: PlayerId;
+  who: PlayerId;
+}
+
+// 奇谋(界魏延):限定技,失去 X 点体力,本回合距离 -X 且额外 X 张杀
+export interface QimouFrame {
+  type: 'qimou';
+  step: 'wait';
+  player: PlayerId;
+}
+
 // 开局选将:主公先选,其余角色按座次依次选;全部选定后发起始手牌
 export interface ChooseGeneralsFrame {
   type: 'choose-generals';
@@ -571,6 +648,8 @@ export type EffectFrame =
   | WuhunFrame | GongxinFrame | GodFactionFrame
   | TuntianFrame | QiaobianFrame | TiaoxinFrame | ZhijiFrame
   | FangquanFrame | GuzhengFrame | HuashenFrame
+  | JrendeFrame | YijueFrame | JfanjianFrame | JlianyingFrame
+  | FenjiFrame | QimouFrame
   | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
@@ -584,7 +663,8 @@ export interface RequestReason {
       | 'pindian' | 'jieming' | 'quhu'
       | 'fangzhu' | 'haoshi' | 'luanwu' | 'yinghun'
       | 'enyuan' | 'xuanhuo' | 'xuanfeng' | 'gongxin'
-      | 'qiaobian' | 'xiangle' | 'tiaoxin' | 'beige' | 'fangquan' | 'guzheng';
+      | 'qiaobian' | 'xiangle' | 'tiaoxin' | 'beige' | 'fangquan' | 'guzheng'
+      | 'yijue' | 'jtieji' | 'jjushou' | 'jlianying' | 'fenwei' | 'liyu';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -604,7 +684,9 @@ export type OptionReason =
   | 'fangzhu' | 'zaiqi' | 'haoshi' | 'lieren' | 'baonve' | 'benghuai' | 'yinghun'
   | 'buyi' | 'pojun' | 'xuanfeng' | 'mingce'
   | 'guixin' | 'shelie' | 'gongxin-where' | 'god-faction'
-  | 'tuntian' | 'zhiji' | 'fangquan' | 'guzheng' | 'huashen';
+  | 'tuntian' | 'zhiji' | 'fangquan' | 'guzheng' | 'huashen'
+  | 'jrende' | 'yijue-heal' | 'jfanjian' | 'fenwei' | 'shensu3' | 'liyu'
+  | 'qimou' | 'fenji' | 'jjizhi' | 'jtianxiang-mode';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }
@@ -626,7 +708,7 @@ export type PendingRequest =
   | { id: number; player: PlayerId; type: 'pick-card';
       target: PlayerId; handCount: number; equips: CardId[]; judges: CardId[];
       reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' | 'mengjin' | 'lieren' | 'xuanhuo'
-        | 'qiaobian' | 'tiaoxin' }
+        | 'qiaobian' | 'tiaoxin' | 'liyu' }
   | { id: number; player: PlayerId; type: 'choose-general';
       candidates: GeneralId[] };
 
@@ -635,7 +717,7 @@ export type ResponseData =
   | { kind: 'use-skill'; skill: SkillName; cardIds?: CardId[]; targets?: PlayerId[];
       declare?: CardName } // 蛊惑声明的牌名
   | { kind: 'end-phase' }
-  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' }
+  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' }
   | { kind: 'cards'; cardIds: CardId[] }                          // 应答 choose-cards
   | { kind: 'option'; index: number }                             // 应答 choose-option
   | { kind: 'players'; players: PlayerId[] }                      // 应答 choose-player

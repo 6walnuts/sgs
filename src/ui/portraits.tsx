@@ -291,6 +291,40 @@ const PORTRAITS: Record<GeneralId, () => ReactNode> = {
   zhangzhaozhanghong: () => Generic({ skin: '#ecd6b0', robe: '#3f6b50', trim: '#e8e2d0', hat: 'scholar', hatColor: '#2c4a38', beard: 'goatee', beardColor: '#cfcabb', old: true }),
   zuoci: () => Generic({ skin: '#e0c39a', robe: '#5c6b7a', trim: '#d5dde3', hat: 'scarf', hatColor: '#43505c', beard: 'full', beardColor: '#e8e4da', old: true }),
   caiwenji: () => Generic({ skin: '#f6dfc6', robe: '#6b5a7a', trim: '#e8d8e0', female: true }),
+  // 界限突破:沿用原版形象(边框金色调由卡面样式区分)
+  jiecaocao: () => PORTRAITS.caocao(),
+  jiesimayi: () => PORTRAITS.simayi(),
+  jiexiahoudun: () => PORTRAITS.xiahoudun(),
+  jiezhangliao: () => PORTRAITS.zhangliao(),
+  jiexuchu: () => PORTRAITS.xuchu(),
+  jieguojia: () => PORTRAITS.guojia(),
+  jiezhenji: () => PORTRAITS.zhenji(),
+  jieliubei: () => PORTRAITS.liubei(),
+  jieguanyu: () => PORTRAITS.guanyu(),
+  jiezhangfei: () => PORTRAITS.zhangfei(),
+  jiezhugeliang: () => PORTRAITS.zhugeliang(),
+  jiezhaoyun: () => PORTRAITS.zhaoyun(),
+  jiemachao: () => PORTRAITS.machao(),
+  jiehuangyueying: () => PORTRAITS.huangyueying(),
+  jiesunquan: () => PORTRAITS.sunquan(),
+  jieganning: () => PORTRAITS.ganning(),
+  jielvmeng: () => PORTRAITS.lvmeng(),
+  jiehuanggai: () => PORTRAITS.huanggai(),
+  jiezhouyu: () => PORTRAITS.zhouyu(),
+  jiedaqiao: () => PORTRAITS.daqiao(),
+  jieluxun: () => PORTRAITS.luxun(),
+  jiesunshangxiang: () => PORTRAITS.sunshangxiang(),
+  jiehuatuo: () => PORTRAITS.huatuo(),
+  jielvbu: () => PORTRAITS.lvbu(),
+  jiediaochan: () => PORTRAITS.diaochan(),
+  jiexiahouyuan: () => PORTRAITS.xiahouyuan(),
+  jiecaoren: () => PORTRAITS.caoren(),
+  jiehuangzhong: () => PORTRAITS.huangzhong(),
+  jieweiyan: () => PORTRAITS.weiyan(),
+  jiexiaoqiao: () => PORTRAITS.xiaoqiao(),
+  jiezhoutai: () => PORTRAITS.zhoutai(),
+  jiezhangjiao: () => PORTRAITS.zhangjiao(),
+  jieyuji: () => PORTRAITS.yuji(),
   // 神武将
   shenguanyu: () => Generic({ skin: '#c96a45', robe: '#7a5a1e', trim: '#f0d060', hat: 'circlet', beard: 'full', fierce: true }),
   shenlvmeng: () => Generic({ skin: '#e8c49a', robe: '#8a7a30', trim: '#f0e0a0', hat: 'scholar', hatColor: '#5c4d20', beard: 'goatee' }),
@@ -496,9 +530,11 @@ export function GeneralPortrait({ general }: { general: GeneralId }) {
   const [bgTop, bgBottom] = FACTION_BG[faction];
   const gradId = `pg-${general}`;
   // 按设置决定图片候选:经典卡牌先试 official 目录,失败退回自备 jpg,再退回内置矢量
+  // 界限突破武将沿用原版图片(id 去掉 jie 前缀)
+  const baseId = general.startsWith('jie') ? general.slice(3) : general;
   const sources = loadSettings().portraitStyle === 'card'
-    ? [`/generals/official/${general}.png`, `/generals/${general}.jpg`]
-    : [`/generals/${general}.jpg`];
+    ? [`/generals/official/${baseId}.png`, `/generals/${baseId}.jpg`]
+    : [`/generals/${baseId}.jpg`];
   return (
     <div className={`portrait portrait-${faction}`} title={GENERAL_NAMES[general]}>
       {!imgLoaded && (
