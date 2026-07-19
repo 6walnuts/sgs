@@ -5,6 +5,10 @@
 import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer as createHttpServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+import path from 'node:path';
 import type { GameState, PendingRequest, ResponseData } from '../engine/types';
 import { applyAction, createGame } from '../engine/engine';
 import { redactStateFor } from '../engine/view';
@@ -16,6 +20,7 @@ export interface ServerOptions {
   aiDelayMs?: number;       // AI 应答延迟
   humanTimeoutMs?: number;  // 在线玩家应答超时(客户端倒计时 20s,这是服务器兜底)
   offlineTimeoutMs?: number; // 掉线玩家由服务器代答的延迟
+  staticDir?: string;       // 生产构建目录(dist):同端口托管游戏页面,便于单端口部署
 }
 
 interface Member {
@@ -49,7 +54,7 @@ class Room {
 
   constructor(
     public readonly id: string,
-    private readonly opts: Required<Omit<ServerOptions, 'port'>>,
+    private readonly opts: Required<Omit<ServerOptions, 'port' | 'staticDir'>>,
     private readonly onEmpty: (room: Room) => void,
   ) {}
 
@@ -206,6 +211,36 @@ class Room {
   }
 }
 
+// ---------- 静态文件托管:让联机服务器同端口直接提供游戏页面 ----------
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
+  '.json': 'application/json', '.ico': 'image/x-icon', '.map': 'application/json',
+  '.woff2': 'font/woff2', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
+};
+
+function serveStatic(staticDir: string | undefined, req: IncomingMessage, res: ServerResponse): void {
+  if (!staticDir) {
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('三国杀联机服务器运行中(未找到 dist/,请先 npm run build 以同端口提供游戏页面)');
+    return;
+  }
+  const urlPath = decodeURIComponent((req.url ?? '/').split('?')[0]);
+  const root = path.resolve(staticDir);
+  let file = path.normalize(path.join(root, urlPath));
+  if (!file.startsWith(root)) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
+  if (!existsSync(file) || statSync(file).isDirectory()) {
+    file = path.join(root, 'index.html'); // 单页应用回退
+  }
+  res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' });
+  createReadStream(file).pipe(res);
+}
+
 export function createServer(options: ServerOptions) {
   const opts = {
     aiDelayMs: options.aiDelayMs ?? 900,
@@ -213,7 +248,9 @@ export function createServer(options: ServerOptions) {
     offlineTimeoutMs: options.offlineTimeoutMs ?? 3000,
   };
   const rooms = new Map<string, Room>();
-  const wss = new WebSocketServer({ port: options.port });
+  const httpServer = createHttpServer((req, res) => serveStatic(options.staticDir, req, res));
+  const wss = new WebSocketServer({ server: httpServer });
+  httpServer.listen(options.port);
 
   wss.on('connection', (ws) => {
     let bound: { room: Room; member: Member } | null = null;
@@ -293,14 +330,16 @@ export function createServer(options: ServerOptions) {
   return {
     wss,
     get port(): number {
-      const addr = wss.address();
+      const addr = httpServer.address();
       return typeof addr === 'object' && addr ? addr.port : options.port;
     },
     close(): Promise<void> {
       for (const room of rooms.values()) room.dispose();
       rooms.clear();
       for (const client of wss.clients) client.terminate();
-      return new Promise((resolve) => wss.close(() => resolve()));
+      return new Promise((resolve) => {
+        wss.close(() => httpServer.close(() => resolve()));
+      });
     },
   };
 }

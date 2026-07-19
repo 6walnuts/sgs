@@ -14,7 +14,33 @@ npm run build    # 类型检查 + 生产构建
 ```
 
 联机:一人在主菜单"创建联机房间"得到 4 位房间号,其他人凭房间号加入,
-房主点开始;跨机器游玩时设置 `VITE_WS_URL` 指向服务器地址。
+房主点开始;空位由 AI 补足,掉线凭 token 自动重连。
+
+### 跨互联网部署(单端口)
+
+`npm run server` 在检测到 `dist/` 时会**同端口托管游戏页面与 WebSocket**,
+所以部署只需一台公网可达的机器:
+
+```bash
+# 方式一:直接跑(需 Node 20+)
+npm ci && npm run build && npm run server   # 默认 8081,PORT=80 可换端口
+# 云主机记得在安全组/防火墙放行该端口,然后所有人打开 http://服务器IP:8081
+
+# 方式二:Docker(也适用于 Railway / Fly.io / Render 等容器平台)
+docker build -t sgs . && docker run -d -p 8081:8081 sgs
+```
+
+页面与 WS 同源,客户端零配置。若要 HTTPS(页面走 https 时浏览器强制 wss),
+在前面加一层反向代理即可,例如 Caddy 两行配置(自动签证书,WS 自动转发):
+
+```
+你的域名.com {
+    reverse_proxy localhost:8081
+}
+```
+
+前端若单独放静态托管(如 Pages)、服务器在别处,构建时用
+`VITE_WS_URL=wss://服务器地址` 指定连接目标。
 
 ## 架构
 

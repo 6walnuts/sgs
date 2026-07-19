@@ -157,5 +157,8 @@ export function defaultWsUrl(): string {
   const fromEnv = import.meta.env?.VITE_WS_URL as string | undefined;
   if (fromEnv) return fromEnv;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname}:8081`;
+  // vite 开发服务器下默认连本机 8081;生产构建默认由托管页面的游戏服务器同源提供 WS
+  // (页面若单独放静态托管、服务器在别处,用 VITE_WS_URL 显式指定)
+  if (import.meta.env?.DEV) return `${proto}://${location.hostname}:8081`;
+  return `${proto}://${location.host}`;
 }
