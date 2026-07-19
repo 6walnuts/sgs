@@ -15,7 +15,8 @@ type ActiveSkill =
   | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose' | 'zhangba' | 'guhuo'
   | 'qiangxi' | 'quhu' | 'tianyi' | 'lianhuan' | 'huoji' | 'shuangxiong' | 'luanji'
   | 'duanliang' | 'dimeng' | 'jiuchi' | 'luanwu'
-  | 'jiushi' | 'xuanhuo' | 'xinzhan' | 'jujian' | 'ganlu' | 'mingce' | 'xianzhen';
+  | 'jiushi' | 'xuanhuo' | 'xinzhan' | 'jujian' | 'ganlu' | 'mingce' | 'xianzhen'
+  | 'gongxin';
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -85,6 +86,7 @@ function cardsNeeded(skill: ActiveSkill): [number, number] {
     case 'xinzhan': return [0, 0];
     case 'ganlu': return [0, 0];
     case 'xianzhen': return [0, 0];
+    case 'gongxin': return [0, 0];
     case 'jujian': return [1, 3];
     case 'qiangxi': return [0, 1]; // 可选:弃一张武器牌代替失去体力
     case 'dimeng': return [0, 99]; // 需弃两者手牌数之差的牌
@@ -292,6 +294,7 @@ export function GameBoard({
       case 'ganlu': return !!human.flags.ganlu;
       case 'mingce': return !!human.flags.mingce;
       case 'xianzhen': return !!human.flags.xianzhenUsed;
+      case 'gongxin': return !!human.flags.gongxin;
       case 'jiushi': return !!human.flags.jiuUsed || !!human.flipped;
       case 'shuangxiong': return typeof human.flags.shuangxiong !== 'number';
       default: return false;

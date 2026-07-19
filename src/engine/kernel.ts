@@ -64,6 +64,11 @@ export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boole
   return true;
 }
 
+// 有效势力:神武将用登场时自选的势力,其余用武将本身势力
+export function factionOf(_s: GameState, p: PlayerState): 'wei' | 'shu' | 'wu' | 'qun' | 'god' {
+  return p.faction ?? GENERALS[p.general].faction;
+}
+
 export function equipCardIds(p: PlayerState): CardId[] {
   return Object.values(p.equips).filter((x): x is CardId => x !== undefined);
 }
@@ -368,6 +373,23 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
   checkVictory(ctx);
   if (s.winner) return;
 
+  // 武魂:神关羽死亡时,令对其造成伤害最多的角色判定,非桃/桃园则死
+  if (GENERALS[dead.general].skills.includes('wuhun') && dead.damageTaken) {
+    let victim: PlayerId | null = null;
+    let most = 0;
+    for (const [pid, n] of Object.entries(dead.damageTaken)) {
+      const q = s.players.find((x) => x.id === pid);
+      if (q?.alive && n > most) {
+        most = n;
+        victim = pid;
+      }
+    }
+    if (victim) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'wuhun' });
+      // 插到栈底,等当前结算(濒死/死亡)完毕后进行
+      s.stack.unshift({ type: 'wuhun', step: 'start', victim });
+    }
+  }
   // 挥泪:杀死马谡的角色立即弃置所有牌(此时马谡已死,直接查武将定义)
   if (killer && GENERALS[dead.general].skills.includes('huilei')) {
     const k = player(s, killer);

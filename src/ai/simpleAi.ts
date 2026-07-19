@@ -478,6 +478,12 @@ function decideOption(
       return { kind: 'option', index: 0 }; // 视为出杀
     case 'mingce':
       return { kind: 'option', index: 1 }; // 保守:摸一张(杀的目标可能是队友)
+    case 'guixin':
+      return { kind: 'option', index: 0 };
+    case 'shelie':
+      return { kind: 'option', index: 0 }; // 五张里最多拿四张,通常优于摸两张
+    case 'god-faction':
+      return { kind: 'option', index: 3 }; // 简化:选群(不受主公技依赖)
     case 'benghuai':
       // 体力充裕时掉体力,残血时掉上限
       return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
@@ -534,6 +540,12 @@ function decideChooseCards(
         .filter((id) => effectiveSuit(s, id, p.id) === 'heart');
       if (hearts.length === 0) return { kind: 'decline' };
       return { kind: 'cards', cardIds: [hearts[0]] };
+    }
+    case 'gongxin': {
+      const shown = req.shownIds ?? [];
+      const heart = shown.find((id) => id > 0 && card(s, id).suit === 'heart');
+      if (heart !== undefined) return { kind: 'cards', cardIds: [heart] };
+      return { kind: 'decline' };
     }
     case 'pindian': {
       const best = p.hand.slice().sort((a, b) => card(s, b).rank - card(s, a).rank)[0];

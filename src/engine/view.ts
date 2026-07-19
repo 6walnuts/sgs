@@ -41,5 +41,14 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
   if (c.pendingRequest?.type === 'choose-general' && c.pendingRequest.player !== viewer) {
     c.pendingRequest = { ...c.pendingRequest, candidates: [] };
   }
+  // 攻心查看的手牌只有发动者可见
+  if (c.pendingRequest?.type === 'choose-cards'
+      && c.pendingRequest.reason.kind === 'gongxin'
+      && c.pendingRequest.player !== viewer) {
+    c.pendingRequest = {
+      ...c.pendingRequest,
+      shownIds: (c.pendingRequest.shownIds ?? []).map(() => -1),
+    };
+  }
   return c;
 }

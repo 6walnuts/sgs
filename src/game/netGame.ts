@@ -8,7 +8,7 @@ import type { ClientMessage, ServerMessage } from '../net/protocol';
 
 export type NetIntent =
   | { kind: 'create'; name: string; playerCount?: 4 | 5 | 8; pickGenerals?: boolean;
-      generalCandidates?: number; aiDelayMs?: number }
+      generalCandidates?: number; aiDelayMs?: number; godGenerals?: boolean }
   | { kind: 'join'; roomId: string; name: string };
 
 export type NetStatus = 'connecting' | 'open' | 'closed' | 'failed';
@@ -87,6 +87,7 @@ export class NetGame {
           type: 'create-room', name: this.intent.name,
           playerCount: this.intent.playerCount, pickGenerals: this.intent.pickGenerals,
           generalCandidates: this.intent.generalCandidates, aiDelayMs: this.intent.aiDelayMs,
+          godGenerals: this.intent.godGenerals,
         });
       } else {
         this.send({ type: 'join-room', roomId: this.intent.roomId, name: this.intent.name });

@@ -14,6 +14,7 @@ export interface LocalGameOptions {
   pickGenerals?: boolean;
   generalCandidates?: number; // 每人候选武将数(主公 +2)
   aiDelayMs?: number;         // AI 出牌延迟
+  godGenerals?: boolean;      // 神武将入池
 }
 
 export class LocalGame {
@@ -30,6 +31,7 @@ export class LocalGame {
       playerCount: opts.playerCount ?? 4,
       pickGenerals: opts.pickGenerals,
       generalCandidates: opts.generalCandidates,
+      godGenerals: opts.godGenerals,
     }).state;
   }
 

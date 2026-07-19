@@ -51,7 +51,9 @@ export type GeneralId =
   | 'caozhi' | 'zhangchunhua' | 'yujin'
   | 'fazheng' | 'masu' | 'xushu'
   | 'lingtong' | 'xusheng' | 'wuguotai'
-  | 'chengong' | 'gaoshun';
+  | 'chengong' | 'gaoshun'
+  // 神武将(风/林)
+  | 'shenguanyu' | 'shenlvmeng' | 'shencaocao';
 
 export type SkillName =
   | 'rende' | 'wusheng' | 'jianxiong' | 'fankui' | 'guicai'
@@ -79,7 +81,8 @@ export type SkillName =
   | 'luoying' | 'jiushi' | 'jueqing' | 'shangshi' | 'yizhong'
   | 'enyuan' | 'xuanhuo' | 'xinzhan' | 'huilei' | 'wuyan' | 'jujian'
   | 'xuanfeng' | 'pojun' | 'ganlu' | 'buyi'
-  | 'mingce' | 'zhichi' | 'xianzhen' | 'jinjiu';
+  | 'mingce' | 'zhichi' | 'xianzhen' | 'jinjiu'
+  | 'wushen' | 'wuhun' | 'shelie' | 'gongxin' | 'guixin' | 'feiying';
 
 export interface PlayerState {
   id: PlayerId;
@@ -97,6 +100,8 @@ export interface PlayerState {
   buqu?: CardId[];   // 周泰"不屈"的创牌(明置)
   unpicked?: boolean; // 选将模式:尚未选定武将(general 为占位值)
   usedLimit?: SkillName[]; // 已发动过的限定技(不随回合清空)
+  faction?: 'wei' | 'shu' | 'wu' | 'qun'; // 神武将登场时自选的势力
+  damageTaken?: Record<PlayerId, number>; // 各角色对自己造成过的伤害合计(武魂用)
   judgeZone: CardId[]; // 延时锦囊,后放置的先结算
   flags: Record<string, number | boolean>; // 回合内计数,回合结束清空
 }
@@ -153,7 +158,7 @@ export interface DamageFrame {
       | 'kuanggu-wait' | 'jieming-player'
       | 'fangzhu-wait' | 'fangzhu-player' | 'lieren-wait'
       | 'baonve-wait' | 'baonve-judged'
-      | 'enyuan-card' | 'pojun-wait'
+      | 'enyuan-card' | 'pojun-wait' | 'guixin-wait'
       | 'yiji-wait' | 'yiji-cards' | 'yiji-player';
   source: PlayerId | null;
   target: PlayerId;
@@ -176,6 +181,7 @@ export interface DamageFrame {
   bnAsked?: boolean;       // 暴虐已询问
   eyAsked?: boolean;       // 恩怨已询问
   pjAsked?: boolean;       // 破军已询问
+  gxAsked?: boolean;       // 归心已询问
   yijiTimes?: number;      // 遗计剩余触发次数(每点伤害一次)
   yijiDrawn?: CardId[];    // 本次遗计摸到且尚未分配的牌
   yijiPicked?: CardId[];
@@ -197,7 +203,7 @@ export interface JudgeFrame {
   type: 'judge';
   step: 'flip' | 'guicai' | 'guicai-wait';
   player: PlayerId;
-  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang' | 'leiji' | 'shuangxiong' | 'baonve';
+  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang' | 'leiji' | 'shuangxiong' | 'baonve' | 'wuhun';
   cardId?: CardId;
   queue?: Array<{ pid: PlayerId; skill: 'guicai' | 'guidao' }>;
   idx?: number;
@@ -250,7 +256,8 @@ export interface DrawStepFrame {
   type: 'draw-step';
   step: 'ask' | 'tuxi-wait' | 'luoyi-wait' | 'tuxi-players'
       | 'shuangxiong-wait' | 'shuangxiong-judged'
-      | 'zaiqi-wait' | 'haoshi-wait' | 'haoshi-cards' | 'haoshi-player';
+      | 'zaiqi-wait' | 'haoshi-wait' | 'haoshi-cards' | 'haoshi-player'
+      | 'shelie-wait';
   player: PlayerId;
   hsCards?: CardId[]; // 好施待送出的手牌
   childResult?: { cardId: CardId };
@@ -374,6 +381,31 @@ export interface TianyiFrame {
   childResult?: { won: boolean };
 }
 
+// 武魂(神关羽):死亡时令对其伤害最多的角色判定,非桃/桃园则死
+export interface WuhunFrame {
+  type: 'wuhun';
+  step: 'start' | 'judged';
+  victim: PlayerId;
+  childResult?: { cardId: CardId };
+}
+
+// 攻心(神吕蒙):查看他人手牌,可展示其中一张红桃并弃置或置于牌堆顶
+export interface GongxinFrame {
+  type: 'gongxin';
+  step: 'pick-wait' | 'where-wait';
+  source: PlayerId;
+  target: PlayerId;
+  picked?: CardId;
+}
+
+// 神武将登场选择势力(建局随机分配模式用;选将模式在选将帧内完成)
+export interface GodFactionFrame {
+  type: 'god-faction';
+  step: 'next' | 'wait';
+  queue: PlayerId[];
+  idx: number;
+}
+
 // 眩惑(法正):红桃手牌给人,再拿其一张牌转交第三者
 export interface XuanhuoFrame {
   type: 'xuanhuo';
@@ -437,7 +469,7 @@ export interface LuanwuFrame {
 // 开局选将:主公先选,其余角色按座次依次选;全部选定后发起始手牌
 export interface ChooseGeneralsFrame {
   type: 'choose-generals';
-  step: 'next' | 'wait';
+  step: 'next' | 'wait' | 'faction-wait'; // faction-wait:刚选了神武将,追问势力
   queue: PlayerId[];
   idx: number;
   candidates: Record<PlayerId, GeneralId[]>;
@@ -463,6 +495,7 @@ export type EffectFrame =
   | PindianFrame | QuhuFrame | TianyiFrame
   | LierenFrame | BenghuaiFrame | LuanwuFrame | YinghunFrame
   | XuanhuoFrame | MingceFrame | XuanfengFrame
+  | WuhunFrame | GongxinFrame | GodFactionFrame
   | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
@@ -475,7 +508,7 @@ export interface RequestReason {
       | 'tianxiang' | 'shensu-equip' | 'leiji' | 'guhuo'
       | 'pindian' | 'jieming' | 'quhu'
       | 'fangzhu' | 'haoshi' | 'luanwu' | 'yinghun'
-      | 'enyuan' | 'xuanhuo' | 'xuanfeng';
+      | 'enyuan' | 'xuanhuo' | 'xuanfeng' | 'gongxin';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -493,7 +526,8 @@ export type OptionReason =
   | 'tianxiang' | 'leiji' | 'guhuo-challenge'
   | 'mengjin' | 'shuangxiong' | 'niepan'
   | 'fangzhu' | 'zaiqi' | 'haoshi' | 'lieren' | 'baonve' | 'benghuai' | 'yinghun'
-  | 'buyi' | 'pojun' | 'xuanfeng' | 'mingce';
+  | 'buyi' | 'pojun' | 'xuanfeng' | 'mingce'
+  | 'guixin' | 'shelie' | 'gongxin-where' | 'god-faction';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }
@@ -560,6 +594,7 @@ export type GameEvent =
   | { type: 'cardRevealed'; player: PlayerId; cardId: CardId; reason: string }
   | { type: 'playerDied'; player: PlayerId; role: Role; killer: PlayerId | null }
   | { type: 'generalChosen'; player: PlayerId; general: GeneralId }
+  | { type: 'factionChosen'; player: PlayerId; faction: string }
   | { type: 'pindian'; a: PlayerId; b: PlayerId; cardA: CardId; cardB: CardId; won: boolean }
   | { type: 'gameOver'; winner: Role[] };
 

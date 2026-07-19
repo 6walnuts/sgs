@@ -49,6 +49,7 @@ class Room {
   playerCount: 4 | 5 | 8 = 4;
   pickGenerals = false;
   generalCandidates: number | undefined;
+  godGenerals = false;
   aiDelayMs: number | undefined; // 房主设置的 AI 出牌延迟(覆盖服务器默认)
   private timer: NodeJS.Timeout | null = null;
 
@@ -119,6 +120,7 @@ class Room {
       playerCount: this.playerCount,
       pickGenerals: this.pickGenerals,
       generalCandidates: this.generalCandidates,
+      godGenerals: this.godGenerals,
     }).state;
     this.broadcastRoom();
     this.broadcastSync();
@@ -271,6 +273,7 @@ export function createServer(options: ServerOptions) {
           const room = new Room(id, opts, (r) => rooms.delete(r.id));
           if (msg.playerCount === 5 || msg.playerCount === 8) room.playerCount = msg.playerCount;
           room.pickGenerals = !!msg.pickGenerals;
+          room.godGenerals = !!msg.godGenerals;
           if (typeof msg.generalCandidates === 'number') {
             room.generalCandidates = Math.max(3, Math.min(6, Math.floor(msg.generalCandidates)));
           }

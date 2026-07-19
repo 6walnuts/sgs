@@ -10,6 +10,7 @@ export interface GameConfig {
   playerCount?: PlayerCount;
   pickGenerals?: boolean;     // 开局选将(默认随机分配)
   generalCandidates?: number; // 每人候选数(主公额外 +2),默认 3;受武将池上限约束
+  godGenerals?: boolean;      // 神武将加入武将池(默认关;神将不进主公候选,登场自选势力)
 }
 
 // 每人候选数:限制在 [3,6],且保证 count*n + 2(主公加成)不超过武将池
@@ -44,7 +45,19 @@ export function buildInitialState(config: GameConfig): GameState {
 
   const count = config.playerCount ?? 4;
   const roles = shuffled<Role>(state, [...ROLE_SETS[count]]);
-  const pool = shuffled(state, ALL_GENERAL_IDS);
+  const available = config.godGenerals
+    ? ALL_GENERAL_IDS
+    : ALL_GENERAL_IDS.filter((g) => GENERALS[g].faction !== 'god');
+  let pool = shuffled(state, available);
+  // 神将不能当主公:把主公将拿到的神将换到池子后段
+  const lordSeat = roles.indexOf('lord');
+  if (GENERALS[pool[lordSeat]]?.faction === 'god') {
+    const swap = pool.findIndex((g, i) => i >= count && GENERALS[g].faction !== 'god');
+    if (swap >= 0) {
+      pool = [...pool];
+      [pool[lordSeat], pool[swap]] = [pool[swap], pool[lordSeat]];
+    }
+  }
 
   const players: PlayerState[] = [];
   for (let seat = 0; seat < count; seat++) {
@@ -81,11 +94,18 @@ export function buildInitialState(config: GameConfig): GameState {
     ];
     const perPlayer = candidateCount(count, config.generalCandidates);
     const candidates: Record<PlayerId, GeneralId[]> = {};
+    // 主公候选不含神将:先从非神部分取主公的候选,再顺序分配其余
+    const nonGod = pool.filter((g) => GENERALS[g].faction !== 'god');
+    const lordCands = nonGod.slice(0, perPlayer + 2);
+    const rest = pool.filter((g) => !lordCands.includes(g));
     let cursor = 0;
     for (const pid of queue) {
-      const n = pid === lord.id ? perPlayer + 2 : perPlayer;
-      candidates[pid] = pool.slice(cursor, cursor + n);
-      cursor += n;
+      if (pid === lord.id) {
+        candidates[pid] = lordCands;
+      } else {
+        candidates[pid] = rest.slice(cursor, cursor + perPlayer);
+        cursor += perPlayer;
+      }
     }
     for (const p of players) {
       p.unpicked = true;
@@ -99,6 +119,11 @@ export function buildInitialState(config: GameConfig): GameState {
 
   for (const p of players) {
     p.hand = state.drawPile.splice(0, 4);
+  }
+  // 随机分配模式:有神武将登场时,开局先让其选择势力
+  const gods = players.filter((p) => GENERALS[p.general].faction === 'god').map((p) => p.id);
+  if (gods.length > 0) {
+    state.stack.push({ type: 'god-faction', step: 'next', queue: gods, idx: 0 });
   }
   return state;
 }

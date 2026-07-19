@@ -339,6 +339,7 @@ body {
 .portrait-shu { border-color: #b04a3a; }
 .portrait-wu { border-color: #3f8a5a; }
 .portrait-qun { border-color: #8a8878; }
+.portrait-god { border-color: #b8973a; }
 .portrait-unknown {
   display: flex; align-items: center; justify-content: center;
   background: #2c443a; color: #7a9a88; font-size: 28px; font-weight: 700;
@@ -362,6 +363,7 @@ body {
 .faction-shu { background: #b04a3a; }
 .faction-wu { background: #3f8a5a; }
 .faction-qun { background: #8a8878; }
+.faction-god { background: #b8973a; }
 
 /* ---------- 判定区与观星 ---------- */
 

@@ -1,8 +1,7 @@
 import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
 import { WEAPON_RANGE, isBlack, isRed, isShaCard } from './deck';
-import { alivePlayers, card, fail, hasSkill, player } from './kernel';
+import { alivePlayers, card, factionOf, fail, hasSkill, player } from './kernel';
 import type { Ctx } from './kernel';
-import { GENERALS } from './generals';
 
 // 座次距离(仅计存活角色)+ 目标的 +1 马 - 自己的 -1 马 - 马术,最小为 1
 export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
@@ -16,6 +15,7 @@ export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
   let d = Math.min(raw, n - raw);
   const src = player(s, from);
   if (player(s, to).equips.horsePlus !== undefined) d += 1;
+  if (hasSkill(s, player(s, to), 'feiying')) d += 1; // 飞影:他人计算与神曹操的距离 +1
   if (src.equips.horseMinus !== undefined) d -= 1;
   if (hasSkill(s, src, 'mashu')) d -= 1;
   return Math.max(1, d);
@@ -49,7 +49,7 @@ export function handLimit(s: GameState, p: PlayerState): number {
   let n = Math.max(0, p.hp);
   if (hasSkill(s, p, 'xueyi')) {
     const qunOthers = alivePlayers(s).filter(
-      (x) => x.id !== p.id && GENERALS[x.general].faction === 'qun',
+      (x) => x.id !== p.id && factionOf(s, x) === 'qun',
     ).length;
     n += 2 * qunOthers;
   }
@@ -120,11 +120,14 @@ export function validateResponseCard(
       return resp.cardId;
   }
   if (pattern === 'sha') {
-    // 禁酒:高顺的酒均视为杀
+    // 禁酒:高顺的酒均视为杀;武神:神关羽的红桃手牌均视为杀
     if (c.name === 'jiu' && hasSkill(s, p, 'jinjiu')) return resp.cardId;
+    if (c.suit === 'heart' && hasSkill(s, p, 'wushen')) return resp.cardId;
     if (!isShaCard(c.name)) fail('打出的牌与要求不符');
     return resp.cardId;
   }
+  // 武神是锁定技:红桃牌只能当杀,不能按原名使用
+  if (c.suit === 'heart' && hasSkill(s, p, 'wushen')) fail('武神:红桃手牌均视为杀');
   if (c.name !== pattern) fail('打出的牌与要求不符');
   return resp.cardId;
 }

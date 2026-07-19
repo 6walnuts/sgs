@@ -116,6 +116,21 @@ function Menu({ onLocal, onOnline }: {
           ))}
         </div>
         <div className="menu-row">
+          <label>神将</label>
+          <button
+            className={settings.godGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ godGenerals: true })}
+          >
+            加入武将池
+          </button>
+          <button
+            className={!settings.godGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ godGenerals: false })}
+          >
+            关闭
+          </button>
+        </div>
+        <div className="menu-row">
           <label>头像</label>
           <button
             className={settings.portraitStyle === 'cartoon' ? 'btn btn-skill btn-skill-on' : 'btn'}
@@ -144,6 +159,7 @@ function Menu({ onLocal, onOnline }: {
             pickGenerals: settings.pickGenerals,
             generalCandidates: settings.generalCandidates,
             aiDelayMs: settings.aiDelayMs,
+            godGenerals: settings.godGenerals,
           })}
         >
           创建联机房间
@@ -214,6 +230,7 @@ function LocalSession({ seed, playerCount, settings, onRestart, onExit }: {
       pickGenerals: settings.pickGenerals,
       generalCandidates: settings.generalCandidates,
       aiDelayMs: settings.aiDelayMs,
+      godGenerals: settings.godGenerals,
     }),
     [seed, playerCount, settings],
   );

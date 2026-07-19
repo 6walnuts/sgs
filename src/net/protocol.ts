@@ -12,7 +12,7 @@ export interface MemberInfo {
 
 export type ClientMessage =
   | { type: 'create-room'; name: string; playerCount?: 4 | 5 | 8; pickGenerals?: boolean;
-      generalCandidates?: number; aiDelayMs?: number }
+      generalCandidates?: number; aiDelayMs?: number; godGenerals?: boolean }
   | { type: 'join-room'; roomId: string; name: string }
   | { type: 'rejoin'; roomId: string; token: string }
   | { type: 'start-game' }

@@ -7,6 +7,7 @@ export interface GameSettings {
   generalCandidates: number; // 每人候选武将数(主公 +2);8 人局会被引擎自动下调
   aiDelayMs: number;
   portraitStyle: PortraitStyle; // cartoon=内置卡通插画;card=经典卡牌头像(用户自备图片)
+  godGenerals: boolean; // 神武将加入武将池(登场自选势力,不进主公候选)
 }
 
 const SETTINGS_KEY = 'sgs-settings';
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   generalCandidates: 3,
   aiDelayMs: 900,
   portraitStyle: 'cartoon',
+  godGenerals: false,
 };
 
 let cache: GameSettings | null = null;

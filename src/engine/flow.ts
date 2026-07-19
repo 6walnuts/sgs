@@ -100,6 +100,7 @@ export function flowRun(ctx: Ctx): void {
           });
         } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')
             || hasSkill(s, p, 'shuangxiong') || hasSkill(s, p, 'haoshi')
+            || hasSkill(s, p, 'shelie')
             || (hasSkill(s, p, 'zaiqi') && p.hp < p.maxHp)) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
@@ -255,6 +256,12 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
   // 禁酒:高顺的酒均视为杀
   if (name === 'jiu' && hasSkill(ctx.s, p, 'jinjiu')) {
     emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jinjiu' });
+    name = 'sha';
+  }
+  // 武神:神关羽的红桃手牌均视为杀(锁定技)
+  if (card(ctx.s, cardId).suit === 'heart' && name !== 'sha'
+      && hasSkill(ctx.s, p, 'wushen')) {
+    emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'wushen' });
     name = 'sha';
   }
   playAs(ctx, p, cardId, name, targets);
@@ -971,6 +978,17 @@ function useSkill(
       pushFrame(ctx, {
         type: 'tianyi', step: 'start', skill: 'xianzhen', source: p.id, target: t.id,
       });
+      return;
+    }
+    case 'gongxin': {
+      if (!hasSkill(s, p, 'gongxin')) fail('你没有攻心技能');
+      if (p.flags.gongxin) fail('攻心每回合限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (t.hand.length === 0) fail('目标没有手牌');
+      p.flags.gongxin = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'gongxin' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, { type: 'gongxin', step: 'pick-wait', source: p.id, target: t.id });
       return;
     }
     case 'guhuo': {

@@ -2,7 +2,7 @@ import type { GeneralId, SkillName } from './types';
 
 export interface GeneralDef {
   id: GeneralId;
-  faction: 'wei' | 'shu' | 'wu' | 'qun';
+  faction: 'wei' | 'shu' | 'wu' | 'qun' | 'god';
   hp: number;
   gender: 'm' | 'f';
   skills: SkillName[];      // 武将技能(jiuyuan 为主公技,仅当其为主公时生效)
@@ -79,6 +79,10 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   wuguotai:     { id: 'wuguotai',     faction: 'wu',  hp: 3, gender: 'f', skills: ['ganlu', 'buyi'], activeSkills: ['ganlu'] },
   chengong:     { id: 'chengong',     faction: 'qun', hp: 3, gender: 'm', skills: ['mingce', 'zhichi'], activeSkills: ['mingce'] },
   gaoshun:      { id: 'gaoshun',      faction: 'qun', hp: 4, gender: 'm', skills: ['xianzhen', 'jinjiu'], activeSkills: ['xianzhen'] },
+  // 神武将(登场时自选势力;不加入主公候选)
+  shenguanyu: { id: 'shenguanyu', faction: 'god', hp: 5, gender: 'm', skills: ['wushen', 'wuhun'], activeSkills: [] },
+  shenlvmeng: { id: 'shenlvmeng', faction: 'god', hp: 3, gender: 'm', skills: ['shelie', 'gongxin'], activeSkills: ['gongxin'] },
+  shencaocao: { id: 'shencaocao', faction: 'god', hp: 3, gender: 'm', skills: ['guixin', 'feiying'], activeSkills: [] },
 };
 
 export const ALL_GENERAL_IDS = Object.keys(GENERALS) as GeneralId[];

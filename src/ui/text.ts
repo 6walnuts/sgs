@@ -33,6 +33,7 @@ export const GENERAL_NAMES: Record<string, string> = {
   fazheng: '法正', masu: '马谡', xushu: '徐庶',
   lingtong: '凌统', xusheng: '徐盛', wuguotai: '吴国太',
   chengong: '陈宫', gaoshun: '高顺',
+  shenguanyu: '神关羽', shenlvmeng: '神吕蒙', shencaocao: '神曹操',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -66,6 +67,8 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   huilei: '挥泪', wuyan: '无言', jujian: '举荐', xuanfeng: '旋风',
   pojun: '破军', ganlu: '甘露', buyi: '补益', mingce: '明策',
   zhichi: '智迟', xianzhen: '陷阵', jinjiu: '禁酒',
+  wushen: '武神', wuhun: '武魂', shelie: '涉猎', gongxin: '攻心',
+  guixin: '归心', feiying: '飞影',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -100,6 +103,7 @@ export const SKILL_HINTS: Record<string, string> = {
   ganlu: '令两名角色交换装备区的牌,装备数差不能超过你已损失的体力(每回合一次)',
   mingce: '交给一名其他角色一张装备牌或杀,其选择视为对你指定的角色出杀、或摸一张牌(每回合一次)',
   xianzhen: '与一名角色拼点:赢则本回合对其出杀无距离次数限制且无视防具,输则本回合不能出杀(每回合一次)',
+  gongxin: '查看一名角色的手牌,可展示其中一张红桃并弃置或置于牌堆顶(每回合一次)',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -107,7 +111,7 @@ export const ROLE_NAMES: Record<Role, string> = {
 };
 
 export const FACTION_NAMES: Record<string, string> = {
-  wei: '魏', shu: '蜀', wu: '吴', qun: '群',
+  wei: '魏', shu: '蜀', wu: '吴', qun: '群', god: '神',
 };
 
 export const SUIT_SYMBOLS: Record<string, string> = {
@@ -219,6 +223,8 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
       return `${label(ev.player)} 展示了 ${cardLabel(s, ev.cardId)}`;
     case 'generalChosen':
       return `${seatLabel(s, ev.player)} 选择了武将 ${GENERAL_NAMES[ev.general]}`;
+    case 'factionChosen':
+      return `${label(ev.player)} 选择了势力:${FACTION_NAMES[ev.faction] ?? ev.faction}`;
     case 'targeted':
       return null; // 仅用于 UI 指向箭头,技能日志由 skillInvoked 承担
     case 'pindian':
@@ -306,6 +312,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return `拼点:与 ${label(req.reason.target!)} 各选一张手牌比点数,大者胜`;
         case 'haoshi':
           return '好施:选择一半手牌交给手牌最少的一名其他角色';
+        case 'gongxin':
+          return '攻心:查看其手牌,可选择展示其中一张红桃';
         case 'yinghun':
           return '英魂:请弃置指定数量的手牌';
         case 'enyuan':
@@ -355,6 +363,10 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'pojun': return '是否发动【破军】令目标摸牌(其体力值)并翻面?';
         case 'xuanfeng': return '旋风:失去装备后,视为出杀或对距离1的角色造成1点伤害';
         case 'mingce': return '明策:视为对指定角色使用杀,或摸一张牌';
+        case 'guixin': return '是否发动【归心】从每名其他角色处获得一张随机手牌,然后翻面?';
+        case 'shelie': return '是否发动【涉猎】放弃摸牌,改为亮出五张并获得每种花色各一张?';
+        case 'gongxin-where': return '攻心:弃置这张红桃,或将其置于牌堆顶';
+        case 'god-faction': return '你是神武将:请选择登场势力(影响救援/血裔等势力技能)';
       }
       return '';
     case 'choose-player':
@@ -434,6 +446,14 @@ export const OPTION_LABELS: Record<string, string> = {
   'xuanfeng-damage': '对距离1造成伤害',
   'mingce-sha': '视为使用杀',
   'mingce-draw': '摸一张牌',
+  guixin: '发动归心',
+  shelie: '发动涉猎',
+  'gongxin-discard': '弃置之',
+  'gongxin-top': '置于牌堆顶',
+  'faction-wei': '魏',
+  'faction-shu': '蜀',
+  'faction-wu': '吴',
+  'faction-qun': '群',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',
