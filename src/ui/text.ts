@@ -33,6 +33,8 @@ export const GENERAL_NAMES: Record<string, string> = {
   fazheng: '法正', masu: '马谡', xushu: '徐庶',
   lingtong: '凌统', xusheng: '徐盛', wuguotai: '吴国太',
   chengong: '陈宫', gaoshun: '高顺',
+  dengai: '邓艾', zhanghe: '张郃', jiangwei: '姜维', liushan: '刘禅',
+  sunce: '孙策', zhangzhaozhanghong: '张昭张纮', zuoci: '左慈', caiwenji: '蔡文姬',
   shenguanyu: '神关羽', shenlvmeng: '神吕蒙', shencaocao: '神曹操',
 };
 
@@ -69,6 +71,10 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   zhichi: '智迟', xianzhen: '陷阵', jinjiu: '禁酒',
   wushen: '武神', wuhun: '武魂', shelie: '涉猎', gongxin: '攻心',
   guixin: '归心', feiying: '飞影',
+  tuntian: '屯田', zaoxian: '凿险', jixi: '急袭', qiaobian: '巧变',
+  tiaoxin: '挑衅', zhiji: '志继', xiangle: '享乐', fangquan: '放权',
+  jiang: '激昂', hunzi: '魂姿', zhijian: '直谏', guzheng: '固政',
+  huashen: '化身', xinsheng: '新生', beige: '悲歌', duanchang: '断肠',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -104,6 +110,9 @@ export const SKILL_HINTS: Record<string, string> = {
   mingce: '交给一名其他角色一张装备牌或杀,其选择视为对你指定的角色出杀、或摸一张牌(每回合一次)',
   xianzhen: '与一名角色拼点:赢则本回合对其出杀无距离次数限制且无视防具,输则本回合不能出杀(每回合一次)',
   gongxin: '查看一名角色的手牌,可展示其中一张红桃并弃置或置于牌堆顶(每回合一次)',
+  tiaoxin: '令攻击范围内含你的一名角色对你使用杀,否则你弃置其一张牌(每回合一次)',
+  jixi: '将一张"田"当顺手牵羊使用(凿险觉醒后)',
+  zhijian: '将手牌中的一张装备牌置入一名其他角色的装备区,然后摸一张牌',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -268,6 +277,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return `${label(r.source!)} 借刀杀人:对 ${label(r.target!)} 使用杀,否则将武器交给对方`;
         case 'luanwu':
           return `${label(r.source!)} 发动了乱武:对距离最近的角色使用杀,否则失去1点体力`;
+        case 'tiaoxin':
+          return `${label(r.target!)} 挑衅你:对其使用一张杀,否则其弃置你一张牌`;
         case 'dying':
           return r.who === req.player
             ? '你处于濒死状态,是否使用桃?'
@@ -318,6 +329,16 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '英魂:请弃置指定数量的手牌';
         case 'enyuan':
           return '恩怨:交出一张红桃手牌,否则失去1点体力(点放弃)';
+        case 'xiangle':
+          return '享乐:弃置一张基本牌,否则你的杀对刘禅无效';
+        case 'beige':
+          return '悲歌:可弃置一张牌,令受到杀伤害的角色进行判定';
+        case 'qiaobian':
+          return '巧变:弃置一张手牌以发动此阶段的巧变';
+        case 'fangquan':
+          return '放权:弃置一张手牌,令一名其他角色获得一个额外回合';
+        case 'guzheng':
+          return '固政:选择一张返还给弃牌的角色,其余弃牌归你';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -367,6 +388,11 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'shelie': return '是否发动【涉猎】放弃摸牌,改为亮出五张并获得每种花色各一张?';
         case 'gongxin-where': return '攻心:弃置这张红桃,或将其置于牌堆顶';
         case 'god-faction': return '你是神武将:请选择登场势力(影响救援/血裔等势力技能)';
+        case 'tuntian': return '是否发动【屯田】判定?(非红桃判定牌置为"田",每张田计算与其他角色距离-1)';
+        case 'zhiji': return '志继觉醒:选择回复1点体力或摸两张牌(体力上限已-1,并获得观星)';
+        case 'fangquan': return '是否发动【放权】跳过出牌阶段?(结束阶段可弃一张手牌令他人获得额外回合)';
+        case 'guzheng': return '是否发动【固政】?(将其此阶段弃置的牌返还一张,其余归你)';
+        case 'huashen': return '化身:声明获得一张化身牌上的技能(至回合结束)';
       }
       return '';
     case 'choose-player':
@@ -388,7 +414,9 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
     case 'arrange-cards':
       return '观星:调整牌堆顶的牌(上方为牌堆顶,按顺序摸取;移到下方则放到牌堆底)';
     case 'pick-card': {
-      const what = req.reason === 'guohe' || req.reason === 'mengjin' ? '弃置' : '获得';
+      if (req.reason === 'qiaobian') return `巧变:选择要移动的 ${label(req.target)} 场上的一张牌`;
+      const what = req.reason === 'guohe' || req.reason === 'mengjin' || req.reason === 'tiaoxin'
+        ? '弃置' : '获得';
       return `选择要${what}的 ${label(req.target)} 的一张牌`;
     }
     case 'choose-general': {
@@ -450,6 +478,11 @@ export const OPTION_LABELS: Record<string, string> = {
   shelie: '发动涉猎',
   'gongxin-discard': '弃置之',
   'gongxin-top': '置于牌堆顶',
+  tuntian: '发动屯田',
+  'zhiji-heal': '回复1点体力',
+  'zhiji-draw': '摸两张牌',
+  fangquan: '发动放权',
+  guzheng: '发动固政',
   'faction-wei': '魏',
   'faction-shu': '蜀',
   'faction-wu': '吴',

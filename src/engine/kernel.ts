@@ -5,7 +5,8 @@ import type {
   Card, CardId, EffectFrame, GameEvent, GameState, PendingRequest, PlayerId,
   PlayerState, Role, SkillName, ZoneRef,
 } from './types';
-import { GENERALS } from './generals';
+import { ALL_GENERAL_IDS, GENERALS } from './generals';
+import type { GeneralId } from './types';
 import { equipSlotOf } from './deck';
 import { randInt, shuffled } from './rng';
 
@@ -57,8 +58,20 @@ export function orderFrom(s: GameState, start?: PlayerId): PlayerId[] {
 
 export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boolean {
   if (!p.alive) return false;
+  if (p.skillsLost) return false; // 断肠:失去所有武将技能
   const def = GENERALS[p.general];
-  if (!def.skills.includes(skill)) return false;
+  const awakened = p.usedLimit ?? [];
+  let owns = def.skills.includes(skill);
+  if (!owns) {
+    // 觉醒技获得的技能
+    if (skill === 'jixi' && def.skills.includes('zaoxian') && awakened.includes('zaoxian')) owns = true;
+    else if (skill === 'guanxing' && def.skills.includes('zhiji') && awakened.includes('zhiji')) owns = true;
+    else if ((skill === 'yingzi' || skill === 'yinghun')
+        && def.skills.includes('hunzi') && awakened.includes('hunzi')) owns = true;
+    // 化身:左慈声明获得的技能
+    else if (def.skills.includes('huashen') && p.huashenSkill === skill) owns = true;
+  }
+  if (!owns) return false;
   const lordOnly: SkillName[] = ['jiuyuan', 'xueyi', 'songwei', 'baonve'];
   if (lordOnly.includes(skill) && p.role !== 'lord') return false;
   return true;
@@ -94,6 +107,7 @@ export function findZone(s: GameState, id: CardId): ZoneRef {
     if (equipCardIds(p).includes(id)) return { zone: 'equip', player: p.id };
     if (p.judgeZone.includes(id)) return { zone: 'judge', player: p.id };
     if (p.buqu?.includes(id)) return { zone: 'buqu', player: p.id };
+    if (p.tian?.includes(id)) return { zone: 'tian', player: p.id };
   }
   if (s.processingZone.includes(id)) return { zone: 'processing' };
   if (s.discardPile.includes(id)) return { zone: 'discard' };
@@ -111,6 +125,7 @@ function removeFrom(s: GameState, id: CardId, from: ZoneRef): void {
     case 'hand': pull(player(s, from.player!).hand); break;
     case 'judge': pull(player(s, from.player!).judgeZone); break;
     case 'buqu': pull(player(s, from.player!).buqu ?? []); break;
+    case 'tian': pull(player(s, from.player!).tian ?? []); break;
     case 'processing': pull(s.processingZone); break;
     case 'discard': pull(s.discardPile); break;
     case 'draw': pull(s.drawPile); break;
@@ -132,6 +147,12 @@ function insertTo(s: GameState, id: CardId, to: ZoneRef): void {
       const p = player(s, to.player!);
       if (!p.buqu) p.buqu = [];
       p.buqu.push(id);
+      break;
+    }
+    case 'tian': {
+      const p = player(s, to.player!);
+      if (!p.tian) p.tian = [];
+      p.tian.push(id);
       break;
     }
     case 'processing': s.processingZone.push(id); break;
@@ -201,6 +222,16 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
     const p = player(s, pid);
     if (p.alive && hasSkill(s, p, 'xuanfeng')) {
       s.stack.unshift({ type: 'xuanfeng', step: 'wait', player: pid });
+    }
+  }
+  // 屯田:邓艾于回合外失去手牌/装备后,可判定屯田(同样插到栈底)
+  const tuntianLosers = new Set([...handOwners.keys(), ...equipLoss.keys()]);
+  for (const pid of tuntianLosers) {
+    const p = player(s, pid);
+    if (p.alive && s.turn.activePlayer !== pid && hasSkill(s, p, 'tuntian')
+        && !(to.zone === 'hand' && to.player === pid)
+        && !(to.zone === 'equip' && to.player === pid)) {
+      s.stack.unshift({ type: 'tuntian', step: 'ask', player: pid });
     }
   }
   // 落英:其他角色的梅花牌因弃置进入弃牌堆时,曹植获得之(简化为自动)
@@ -279,6 +310,20 @@ export function flipToProcessing(ctx: Ctx): CardId {
 export function pickRandomHand(ctx: Ctx, p: PlayerState): CardId {
   if (p.hand.length === 0) fail(`${p.id} 没有手牌`);
   return p.hand[randInt(ctx.s, p.hand.length)];
+}
+
+// 化身牌:从未登场且未被化身占用的非神武将中随机发放
+export function grantHuashen(s: GameState, pid: PlayerId, n: number): void {
+  const p = player(s, pid);
+  const used = new Set<GeneralId>(s.players.map((x) => x.general));
+  for (const x of s.players) for (const g of x.huashen ?? []) used.add(g);
+  const pool = ALL_GENERAL_IDS.filter((g) => !used.has(g) && GENERALS[g].faction !== 'god');
+  p.huashen = p.huashen ?? [];
+  for (let i = 0; i < n && pool.length > 0; i++) {
+    const idx = randInt(s, pool.length);
+    p.huashen.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
 }
 
 // ---------- 体力 ----------
@@ -360,7 +405,7 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
   // 行殇:曹丕获得死亡角色的手牌与装备(简化为自动发动),判定区仍弃置
   const mourner = alivePlayers(s).find((x) => x.id !== pid && hasSkill(s, x, 'xingshang'));
   const loot = [...dead.hand, ...equipCardIds(dead)];
-  const rest = [...dead.judgeZone, ...(dead.buqu ?? [])];
+  const rest = [...dead.judgeZone, ...(dead.buqu ?? []), ...(dead.tian ?? [])];
   if (mourner && loot.length > 0) {
     emit(ctx, { type: 'skillInvoked', player: mourner.id, skill: 'xingshang' });
     moveCards(ctx, loot, { zone: 'hand', player: mourner.id }, 'xingshang');
@@ -388,6 +433,14 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
       emit(ctx, { type: 'skillInvoked', player: pid, skill: 'wuhun' });
       // 插到栈底,等当前结算(濒死/死亡)完毕后进行
       s.stack.unshift({ type: 'wuhun', step: 'start', victim });
+    }
+  }
+  // 断肠:杀死蔡文姬的角色失去所有武将技能
+  if (killer && GENERALS[dead.general].skills.includes('duanchang')) {
+    const k = player(s, killer);
+    if (k.alive) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'duanchang' });
+      k.skillsLost = true;
     }
   }
   // 挥泪:杀死马谡的角色立即弃置所有牌(此时马谡已死,直接查武将定义)

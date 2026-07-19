@@ -31,6 +31,8 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
     if (!p.roleRevealed && !c.winner) p.role = 'loyalist';
     // 选将中:他人的候选/占位武将不可见
     if (p.unpicked) p.general = 'liubei';
+    // 化身牌只有左慈自己可见(声明的化身技能 huashenSkill 公开)
+    if (p.huashen) p.huashen = p.huashen.map(() => 'liubei');
   }
   c.eventLog = c.eventLog.map((ev) => redactEvent(ev, viewer));
   // 观星等展示牌堆内容的请求,内容只有被询问者可见
@@ -40,6 +42,12 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
   // 选将候选只有被询问者可见
   if (c.pendingRequest?.type === 'choose-general' && c.pendingRequest.player !== viewer) {
     c.pendingRequest = { ...c.pendingRequest, candidates: [] };
+  }
+  // 化身可选技能来自隐藏的化身牌,只有被询问者可见
+  if (c.pendingRequest?.type === 'choose-option'
+      && c.pendingRequest.reason === 'huashen'
+      && c.pendingRequest.player !== viewer) {
+    c.pendingRequest = { ...c.pendingRequest, options: c.pendingRequest.options.map(() => '?') };
   }
   // 攻心查看的手牌只有发动者可见
   if (c.pendingRequest?.type === 'choose-cards'

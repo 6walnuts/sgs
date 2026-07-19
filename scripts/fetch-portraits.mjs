@@ -74,6 +74,14 @@ const GENERALS = [
   { id: 'wuguotai', name: '吴国太', candidates: [], search: 'Lady Wu illustration Romance of the Three Kingdoms' },
   { id: 'chengong', name: '陈宫', candidates: ['Chen Gong Qing illustration.jpg'], search: 'Chen Gong illustration Romance of the Three Kingdoms' },
   { id: 'gaoshun', name: '高顺', candidates: [], search: 'Gao Shun illustration Romance of the Three Kingdoms' },
+  { id: 'dengai', name: '邓艾', candidates: ['Deng Ai Qing illustration.jpg'], search: 'Deng Ai illustration Romance of the Three Kingdoms' },
+  { id: 'zhanghe', name: '张郃', candidates: ['Zhang He Qing illustration.jpg'], search: 'Zhang He illustration Romance of the Three Kingdoms' },
+  { id: 'jiangwei', name: '姜维', candidates: ['Jiang Wei Qing illustration.jpg'], search: 'Jiang Wei illustration Romance of the Three Kingdoms' },
+  { id: 'liushan', name: '刘禅', candidates: ['Liu Shan Qing illustration.jpg'], search: 'Liu Shan illustration Romance of the Three Kingdoms' },
+  { id: 'sunce', name: '孙策', candidates: ['Sun Ce Qing illustration.jpg'], search: 'Sun Ce illustration Romance of the Three Kingdoms' },
+  { id: 'zhangzhaozhanghong', name: '张昭张纮', candidates: ['Zhang Zhao Qing illustration.jpg'], search: 'Zhang Zhao illustration Romance of the Three Kingdoms' },
+  { id: 'zuoci', name: '左慈', candidates: ['Zuo Ci Qing illustration.jpg'], search: 'Zuo Ci illustration Romance of the Three Kingdoms' },
+  { id: 'caiwenji', name: '蔡文姬', candidates: ['Cai Wenji Qing illustration.jpg'], search: 'Cai Wenji illustration Romance of the Three Kingdoms' },
 ];
 
 const PD_PATTERN = /public\s*domain|^pd\b|pd-|cc0/i;

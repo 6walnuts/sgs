@@ -18,6 +18,8 @@ export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
   if (hasSkill(s, player(s, to), 'feiying')) d += 1; // 飞影:他人计算与神曹操的距离 +1
   if (src.equips.horseMinus !== undefined) d -= 1;
   if (hasSkill(s, src, 'mashu')) d -= 1;
+  // 屯田:邓艾每有一张"田",计算与其他角色的距离 -1
+  if (hasSkill(s, src, 'tuntian')) d -= src.tian?.length ?? 0;
   return Math.max(1, d);
 }
 

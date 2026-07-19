@@ -79,6 +79,15 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   wuguotai:     { id: 'wuguotai',     faction: 'wu',  hp: 3, gender: 'f', skills: ['ganlu', 'buyi'], activeSkills: ['ganlu'] },
   chengong:     { id: 'chengong',     faction: 'qun', hp: 3, gender: 'm', skills: ['mingce', 'zhichi'], activeSkills: ['mingce'] },
   gaoshun:      { id: 'gaoshun',      faction: 'qun', hp: 4, gender: 'm', skills: ['xianzhen', 'jinjiu'], activeSkills: ['xianzhen'] },
+  // 山包
+  dengai:            { id: 'dengai',            faction: 'wei', hp: 4, gender: 'm', skills: ['tuntian', 'zaoxian'], activeSkills: ['jixi'] },
+  zhanghe:           { id: 'zhanghe',           faction: 'wei', hp: 4, gender: 'm', skills: ['qiaobian'], activeSkills: [] },
+  jiangwei:          { id: 'jiangwei',          faction: 'shu', hp: 4, gender: 'm', skills: ['tiaoxin', 'zhiji'], activeSkills: ['tiaoxin'] },
+  liushan:           { id: 'liushan',           faction: 'shu', hp: 3, gender: 'm', skills: ['xiangle', 'fangquan'], activeSkills: [] },
+  sunce:             { id: 'sunce',             faction: 'wu',  hp: 4, gender: 'm', skills: ['jiang', 'hunzi'], activeSkills: [] },
+  zhangzhaozhanghong:{ id: 'zhangzhaozhanghong',faction: 'wu',  hp: 3, gender: 'm', skills: ['zhijian', 'guzheng'], activeSkills: ['zhijian'] },
+  zuoci:             { id: 'zuoci',             faction: 'qun', hp: 3, gender: 'm', skills: ['huashen', 'xinsheng'], activeSkills: [] },
+  caiwenji:          { id: 'caiwenji',          faction: 'qun', hp: 3, gender: 'f', skills: ['beige', 'duanchang'], activeSkills: [] },
   // 神武将(登场时自选势力;不加入主公候选)
   shenguanyu: { id: 'shenguanyu', faction: 'god', hp: 5, gender: 'm', skills: ['wushen', 'wuhun'], activeSkills: [] },
   shenlvmeng: { id: 'shenlvmeng', faction: 'god', hp: 3, gender: 'm', skills: ['shelie', 'gongxin'], activeSkills: ['gongxin'] },

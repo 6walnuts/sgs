@@ -51,6 +51,9 @@ export function Seat({
             {!p.unpicked && GENERALS[p.general].skills.map((sk) => (
               <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
             ))}
+            {p.huashenSkill && (
+              <span className="skill-tag">化:{SKILL_NAMES[p.huashenSkill]}</span>
+            )}
           </div>
           <div className="seat-hp">
             {Array.from({ length: p.maxHp }, (_, i) => (
@@ -91,6 +94,14 @@ export function Seat({
         <div className="seat-equips seat-judges">
           <span className="skill-tag">不屈</span>
           {p.buqu!.map((id) => (
+            <CardChip key={id} state={state} cardId={id} small />
+          ))}
+        </div>
+      )}
+      {(p.tian?.length ?? 0) > 0 && (
+        <div className="seat-equips seat-judges">
+          <span className="skill-tag">田</span>
+          {p.tian!.map((id) => (
             <CardChip key={id} state={state} cardId={id} small />
           ))}
         </div>

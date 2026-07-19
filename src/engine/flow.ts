@@ -31,8 +31,23 @@ export function nextTurn(ctx: Ctx): void {
   cur.flags = {};
   // 智迟的免疫只持续到该回合结束
   for (const x of s.players) delete x.flags.zhichi;
+  // 放权:额外回合插在这里;结束后从刘禅的下一位继续
+  if (s.extraTurn && !s.extraTurn.active) {
+    const et = s.extraTurn;
+    if (player(s, et.player).alive) {
+      et.active = true;
+      s.turn = { activePlayer: et.player, phase: 'start', turnNumber: s.turn.turnNumber + 1 };
+      emit(ctx, { type: 'turnStarted', player: et.player, turnNumber: s.turn.turnNumber });
+      return;
+    }
+    delete s.extraTurn;
+  }
   const n = s.players.length;
   let seat = cur.seat;
+  if (s.extraTurn?.active) {
+    seat = s.extraTurn.resumeSeat;
+    delete s.extraTurn;
+  }
   // 翻面的角色轮到时翻回并跳过该回合;两圈保证全员翻面时也能找到下一个行动者
   for (let i = 0; i < 2 * n; i++) {
     seat = (seat + 1) % n;
@@ -58,12 +73,38 @@ export function flowRun(ctx: Ctx): void {
     case 'start':
       if (!p.flags._start) {
         p.flags._start = true;
+        // 觉醒技(锁定,自动):凿险/魂姿
+        const awakened = p.usedLimit ?? [];
+        if (hasSkill(s, p, 'zaoxian') && !awakened.includes('zaoxian')
+            && (p.tian?.length ?? 0) >= 3) {
+          emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'zaoxian' });
+          p.usedLimit = [...awakened, 'zaoxian'];
+          p.maxHp -= 1;
+          if (p.hp > p.maxHp) p.hp = p.maxHp;
+          emit(ctx, { type: 'hpChanged', player: p.id, hp: p.hp, delta: 0 });
+        }
+        if (hasSkill(s, p, 'hunzi') && !(p.usedLimit ?? []).includes('hunzi') && p.hp === 1) {
+          emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'hunzi' });
+          p.usedLimit = [...(p.usedLimit ?? []), 'hunzi'];
+          p.maxHp -= 1;
+          if (p.hp > p.maxHp) p.hp = p.maxHp;
+          emit(ctx, { type: 'hpChanged', player: p.id, hp: p.hp, delta: 0 });
+        }
+        // 志继(觉醒,需选择回复或摸牌)
+        if (hasSkill(s, p, 'zhiji') && !(p.usedLimit ?? []).includes('zhiji')
+            && p.hand.length === 0) {
+          pushFrame(ctx, { type: 'zhiji', step: 'wait', player: p.id });
+        }
         if (hasSkill(s, p, 'guanxing')) {
           pushFrame(ctx, { type: 'guanxing', step: 'ask', player: p.id });
         } else if (hasSkill(s, p, 'luoshen')) {
           pushFrame(ctx, { type: 'luoshen', step: 'ask', player: p.id });
         } else if (hasSkill(s, p, 'yinghun') && p.hp < p.maxHp) {
           pushFrame(ctx, { type: 'yinghun', step: 'start', player: p.id });
+        }
+        // 化身:左慈每回合准备阶段可重新声明化身技能(压在最上,先处理)
+        if (hasSkill(s, p, 'huashen') && (p.huashen?.length ?? 0) > 0) {
+          pushFrame(ctx, { type: 'huashen', step: 'wait', player: p.id });
         }
         return;
       }
@@ -74,6 +115,13 @@ export function flowRun(ctx: Ctx): void {
       if (!p.flags._shensu1 && hasSkill(s, p, 'shensu')) {
         p.flags._shensu1 = true;
         pushFrame(ctx, { type: 'shensu', step: 'wait', player: p.id, variant: 1 });
+        return;
+      }
+      // 巧变:弃一张手牌跳过判定阶段
+      if (!p.flags._qbJudge && !p.flags._judge && hasSkill(s, p, 'qiaobian')
+          && p.hand.length > 0) {
+        p.flags._qbJudge = true;
+        pushFrame(ctx, { type: 'qiaobian', step: 'ask', player: p.id, phase: 'judge' });
         return;
       }
       if (!p.flags._judge) {
@@ -91,6 +139,12 @@ export function flowRun(ctx: Ctx): void {
       setPhase(ctx, 'draw');
       return;
     case 'draw':
+      if (!p.flags._qbDraw && !p.flags._draw && hasSkill(s, p, 'qiaobian')
+          && p.hand.length > 0) {
+        p.flags._qbDraw = true;
+        pushFrame(ctx, { type: 'qiaobian', step: 'ask', player: p.id, phase: 'draw' });
+        return;
+      }
       if (!p.flags._draw) {
         p.flags._draw = true;
         if (p.flags.skipDraw) {
@@ -120,6 +174,18 @@ export function flowRun(ctx: Ctx): void {
         emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'play', reason: 'lebusishu' });
         p.flags.playEnded = true;
       }
+      if (!p.flags._qbPlay && !p.flags.playEnded && hasSkill(s, p, 'qiaobian')
+          && p.hand.length > 0) {
+        p.flags._qbPlay = true;
+        pushFrame(ctx, { type: 'qiaobian', step: 'ask', player: p.id, phase: 'play' });
+        return;
+      }
+      // 放权:刘禅可跳过出牌阶段(结束阶段可弃一张手牌授予额外回合)
+      if (!p.flags._fangquan && !p.flags.playEnded && hasSkill(s, p, 'fangquan')) {
+        p.flags._fangquan = true;
+        pushFrame(ctx, { type: 'fangquan', step: 'skip-wait', player: p.id });
+        return;
+      }
       // 神速②:跳过出牌阶段并弃置一张装备牌,视为使用一张杀
       if (!p.flags._shensu2 && !p.flags.playEnded
           && hasSkill(s, p, 'shensu') && equipCardIds(p).length > 0) {
@@ -131,6 +197,16 @@ export function flowRun(ctx: Ctx): void {
       ask(ctx, { player: p.id, type: 'play' });
       return;
     case 'discard': {
+      if (p.flags.qbSkipDiscard) {
+        setPhase(ctx, 'end');
+        return;
+      }
+      if (!p.flags._qbDiscard && hasSkill(s, p, 'qiaobian') && p.hand.length > 0
+          && p.hand.length > handLimit(s, p)) {
+        p.flags._qbDiscard = true;
+        pushFrame(ctx, { type: 'qiaobian', step: 'ask', player: p.id, phase: 'discard' });
+        return;
+      }
       const excess = p.hand.length - handLimit(s, p);
       if (excess > 0 && hasSkill(s, p, 'keji') && !p.flags.anySha) {
         emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'keji' });
@@ -162,6 +238,12 @@ export function flowRun(ctx: Ctx): void {
           pushFrame(ctx, { type: 'benghuai', step: 'wait', player: p.id });
           return;
         }
+        // 放权:跳过了出牌阶段,可弃一张手牌令他人获得额外回合
+        if (p.flags.fangquan && p.hand.length > 0) {
+          delete p.flags.fangquan;
+          pushFrame(ctx, { type: 'fangquan', step: 'card-wait', player: p.id });
+          return;
+        }
       }
       if (hasSkill(s, p, 'biyue')) {
         emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'biyue' });
@@ -183,6 +265,13 @@ export function flowOnResponse(ctx: Ctx, req: PendingRequest, resp: ResponseData
     const p = player(s, req.player);
     validateChosenHand(p, resp.cardIds, req.min, req.max);
     moveCards(ctx, resp.cardIds, { zone: 'discard' }, 'discard-phase');
+    // 固政:张昭张纮可返还其一张弃牌并获得其余
+    const holder = alivePlayers(s).find((x) => x.id !== p.id && hasSkill(s, x, 'guzheng'));
+    if (holder) {
+      pushFrame(ctx, {
+        type: 'guzheng', step: 'ask', holder: holder.id, who: p.id, cards: [...resp.cardIds],
+      });
+    }
     setPhase(ctx, 'end');
     return;
   }
@@ -396,6 +485,12 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       assertNotWeimu(ctx, cardId, t);
       assertNotWuyan(ctx, p, t);
       if (kongchengProtected(s, t)) fail('空城:该角色不能成为决斗的目标');
+      for (const who of [p, t]) {
+        if (hasSkill(s, who, 'jiang')) {
+          emit(ctx, { type: 'skillInvoked', player: who.id, skill: 'jiang' });
+          drawCards(ctx, who.id, 1);
+        }
+      }
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
       pushTrick(ctx, { cardId, effName: 'juedou', source: p.id, target: t.id });
@@ -535,6 +630,20 @@ function startSlash(
   for (const id of extraCardIds) moveCard(ctx, id, { zone: 'processing' }, 'play');
   emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets, as: via ? 'sha' : undefined });
   if (via) emit(ctx, { type: 'skillInvoked', player: p.id, skill: via });
+  // 激昂:孙策使用红色杀、或被指定为红色杀的目标时摸一张
+  if (isRed(card(s, cardId).suit)) {
+    if (hasSkill(s, p, 'jiang')) {
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jiang' });
+      drawCards(ctx, p.id, 1);
+    }
+    for (const tid of targets) {
+      const t = player(s, tid);
+      if (hasSkill(s, t, 'jiang')) {
+        emit(ctx, { type: 'skillInvoked', player: tid, skill: 'jiang' });
+        drawCards(ctx, tid, 1);
+      }
+    }
+  }
   if (targets.length > 1) emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'fangtian' });
   // 逆序压栈:先结算第一个目标;牌在全部结算完后由最后弹出的帧弃置
   for (let i = targets.length - 1; i >= 0; i--) {
@@ -978,6 +1087,42 @@ function useSkill(
       pushFrame(ctx, {
         type: 'tianyi', step: 'start', skill: 'xianzhen', source: p.id, target: t.id,
       });
+      return;
+    }
+    case 'tiaoxin': {
+      if (!hasSkill(s, p, 'tiaoxin')) fail('你没有挑衅技能');
+      if (p.flags.tiaoxin) fail('挑衅每回合限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (distance(s, t.id, p.id) > attackRange(s, t)) {
+        fail('挑衅只能指定攻击范围内含你的角色');
+      }
+      p.flags.tiaoxin = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'tiaoxin' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, { type: 'tiaoxin', step: 'sha-wait', source: p.id, target: t.id });
+      return;
+    }
+    case 'jixi': {
+      if (!hasSkill(s, p, 'jixi')) fail('你没有急袭技能(凿险觉醒后获得)');
+      if (cardIds.length !== 1 || !(p.tian ?? []).includes(cardIds[0])) {
+        fail('急袭需要选择一张"田"');
+      }
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jixi' });
+      playAs(ctx, p, cardIds[0], 'shunshou', targets);
+      return;
+    }
+    case 'zhijian': {
+      if (!hasSkill(s, p, 'zhijian')) fail('你没有直谏技能');
+      if (cardIds.length !== 1) fail('直谏需要选择手牌中的一张装备牌');
+      assertInHand(s, p, cardIds[0]);
+      const slot = equipSlotOf(card(s, cardIds[0]).name);
+      if (slot === null) fail('直谏需要装备牌');
+      const t = requireTarget(ctx, p, targets);
+      if (t.equips[slot] !== undefined) fail('目标对应装备栏已有牌');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'zhijian' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      moveCard(ctx, cardIds[0], { zone: 'equip', player: t.id }, 'zhijian');
+      drawCards(ctx, p.id, 1);
       return;
     }
     case 'gongxin': {

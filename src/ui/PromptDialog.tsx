@@ -127,7 +127,7 @@ export function PromptDialog({
           <>
             {req.options.map((opt, i) => (
               <button key={opt} className="btn btn-primary" onClick={() => onSubmit({ kind: 'option', index: i })}>
-                {OPTION_LABELS[opt] ?? opt}
+                {OPTION_LABELS[opt] ?? SKILL_NAMES[opt as keyof typeof SKILL_NAMES] ?? opt}
               </button>
             ))}
             {req.canDecline && (

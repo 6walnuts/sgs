@@ -261,6 +261,19 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     return { kind: 'play-card', cardId: ts2[0], targets: [] }; // 简化:重铸换牌
   }
 
+  // 14.7 挑衅:骚扰攻击范围内含自己的敌人
+  if (hasGeneralSkill(p, 'tiaoxin') && !p.flags.tiaoxin) {
+    const t = enemies.find((e) => distance(s, e.id, p.id) <= attackRange(s, e));
+    if (t) return { kind: 'use-skill', skill: 'tiaoxin', targets: [t.id] };
+  }
+  // 14.8 急袭:凿险觉醒后,用"田"当顺手牵羊
+  if ((p.usedLimit ?? []).includes('zaoxian') && (p.tian?.length ?? 0) > 0) {
+    const t = enemies.find(
+      (e) => distance(s, p.id, e.id) <= 1 && !hasGeneralSkill(e, 'qianxun') && stealableCount(e) > 0,
+    );
+    if (t) return { kind: 'use-skill', skill: 'jixi', cardIds: [p.tian![0]], targets: [t.id] };
+  }
+
   // 15. 杀(含火杀/雷杀/武圣/龙胆)
   if (shaUsed(p) < shaLimit(s, p)) {
     const inRange = enemies
@@ -355,6 +368,11 @@ function decideRespondCard(
       if (req.reason.kind === 'qinglong' || req.reason.kind === 'jiedao') {
         const t = req.reason.target ? player(s, req.reason.target) : null;
         // 借刀:目标非敌人时宁可交武器也不杀队友
+        if (!t || !isEnemy(s, p.role, t)) return { kind: 'decline' };
+      }
+      if (req.reason.kind === 'tiaoxin') {
+        // 挑衅:对方是敌人才回杀,否则宁可被弃一张牌
+        const t = req.reason.target ? player(s, req.reason.target) : null;
         if (!t || !isEnemy(s, p.role, t)) return { kind: 'decline' };
       }
       const sha = shaCards(s, p);
@@ -484,6 +502,17 @@ function decideOption(
       return { kind: 'option', index: 0 }; // 五张里最多拿四张,通常优于摸两张
     case 'god-faction':
       return { kind: 'option', index: 3 }; // 简化:选群(不受主公技依赖)
+    case 'tuntian':
+      return { kind: 'option', index: 0 }; // 屯田稳赚(距离-1,凿险觉醒素材)
+    case 'zhiji':
+      // 志继:受伤则回复,满血则摸两张
+      return { kind: 'option', index: p.hp < p.maxHp ? 0 : 1 };
+    case 'fangquan':
+      return { kind: 'decline' }; // 简化:AI 不放权,正常出牌
+    case 'guzheng':
+      return { kind: 'option', index: 0 }; // 白拿弃牌
+    case 'huashen':
+      return { kind: 'option', index: 0 };
     case 'benghuai':
       // 体力充裕时掉体力,残血时掉上限
       return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
@@ -555,6 +584,36 @@ function decideChooseCards(
       const heart = sortByScoreAsc(s, p, p.hand).filter((id) => card(s, id).suit === 'heart');
       if (heart.length > 0) return { kind: 'cards', cardIds: [heart[0]] };
       return { kind: 'decline' }; // 没红桃只能失去体力
+    }
+    case 'xiangle': {
+      // 享乐:弃一张基本牌保住这次杀,优先弃多余的杀
+      const basics = sortByScoreAsc(s, p, p.hand)
+        .filter((id) => ['sha', 'huosha', 'leisha', 'shan', 'tao', 'jiu'].includes(card(s, id).name))
+        .sort((a, b) => (isShaCard(card(s, a).name) ? -1 : 0) - (isShaCard(card(s, b).name) ? -1 : 0));
+      if (basics.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [basics[0]] };
+    }
+    case 'beige': {
+      // 悲歌:受害者是队友或来源是敌人时,弃一张低价值牌发动
+      const df = s.stack.find(
+        (f) => f.type === 'damage' && f.step === 'beige-card',
+      ) as { target: PlayerId; source: PlayerId | null } | undefined;
+      if (!df) return { kind: 'decline' };
+      const victim = player(s, df.target);
+      const worth = !isEnemy(s, p.role, victim)
+        || (df.source !== null && df.source !== p.id && isEnemy(s, p.role, player(s, df.source)));
+      const junk = sortByScoreAsc(s, p, p.hand).filter((id) => keepScore(s, p, id) <= 35);
+      if (!worth || junk.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [junk[0]] };
+    }
+    case 'qiaobian':
+    case 'fangquan':
+      return { kind: 'decline' }; // 简化:AI 不发动巧变/放权
+    case 'guzheng': {
+      // 固政:把最没用的一张还回去,好牌留下
+      const shown = req.shownIds ?? [];
+      const worst = shown.slice().sort((a, b) => keepScore(s, p, a) - keepScore(s, p, b))[0];
+      return { kind: 'cards', cardIds: [worst] };
     }
     case 'shensu-equip': {
       const equips = Object.values(p.equips).filter((id): id is CardId => id !== undefined);

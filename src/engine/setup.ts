@@ -1,5 +1,6 @@
 import type { GameState, GeneralId, PlayerId, PlayerState, Role } from './types';
 import { buildDeck } from './deck';
+import { grantHuashen } from './kernel';
 import { ALL_GENERAL_IDS, GENERALS } from './generals';
 import { shuffled } from './rng';
 
@@ -119,6 +120,7 @@ export function buildInitialState(config: GameConfig): GameState {
 
   for (const p of players) {
     p.hand = state.drawPile.splice(0, 4);
+    if (GENERALS[p.general].skills.includes('huashen')) grantHuashen(state, p.id, 2);
   }
   // 随机分配模式:有神武将登场时,开局先让其选择势力
   const gods = players.filter((p) => GENERALS[p.general].faction === 'god').map((p) => p.id);

@@ -16,7 +16,8 @@ type ActiveSkill =
   | 'qiangxi' | 'quhu' | 'tianyi' | 'lianhuan' | 'huoji' | 'shuangxiong' | 'luanji'
   | 'duanliang' | 'dimeng' | 'jiuchi' | 'luanwu'
   | 'jiushi' | 'xuanhuo' | 'xinzhan' | 'jujian' | 'ganlu' | 'mingce' | 'xianzhen'
-  | 'gongxin';
+  | 'gongxin'
+  | 'tiaoxin' | 'jixi' | 'zhijian';
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -87,6 +88,7 @@ function cardsNeeded(skill: ActiveSkill): [number, number] {
     case 'ganlu': return [0, 0];
     case 'xianzhen': return [0, 0];
     case 'gongxin': return [0, 0];
+    case 'tiaoxin': return [0, 0];
     case 'jujian': return [1, 3];
     case 'qiangxi': return [0, 1]; // 可选:弃一张武器牌代替失去体力
     case 'dimeng': return [0, 99]; // 需弃两者手牌数之差的牌
@@ -272,8 +274,14 @@ export function GameBoard({
 
   const weaponId = human.equips.weapon;
   const hasZhangba = weaponId !== undefined && state.cards[weaponId].name === 'zhangba';
+  // 化身声明的技能若是主动技(在任意武将的 activeSkills 里出现过),也提供按钮
+  const huashenActive = human.huashenSkill !== undefined
+    && Object.values(GENERALS).some((g) => (g.activeSkills as string[]).includes(human.huashenSkill!))
+    ? [human.huashenSkill as ActiveSkill]
+    : [];
   const activeSkills: ActiveSkill[] = [
     ...(GENERALS[human.general].activeSkills as ActiveSkill[]),
+    ...huashenActive,
     ...(hasZhangba ? (['zhangba'] as ActiveSkill[]) : []),
   ];
   const skillDisabled = (sk: ActiveSkill): boolean => {
@@ -297,6 +305,9 @@ export function GameBoard({
       case 'gongxin': return !!human.flags.gongxin;
       case 'jiushi': return !!human.flags.jiuUsed || !!human.flipped;
       case 'shuangxiong': return typeof human.flags.shuangxiong !== 'number';
+      case 'tiaoxin': return !!human.flags.tiaoxin;
+      case 'jixi':
+        return !(human.usedLimit ?? []).includes('zaoxian') || (human.tian?.length ?? 0) === 0;
       default: return false;
     }
   };
@@ -410,6 +421,20 @@ export function GameBoard({
               ))}
               {human.hand.length === 0 && <span className="dialog-hint">没有手牌</span>}
             </div>
+            {selSkill === 'jixi' && (human.tian?.length ?? 0) > 0 && (
+              <div className="hand">
+                <span className="dialog-hint">田:</span>
+                {human.tian!.map((id) => (
+                  <CardChip
+                    key={id}
+                    state={state}
+                    cardId={id}
+                    selected={selCards.includes(id)}
+                    onClick={isMyPlay ? () => toggleCard(id) : undefined}
+                  />
+                ))}
+              </div>
+            )}
             {selSkill === 'guhuo' && (
               <div className="actions">
                 <span className="dialog-hint">声明:</span>
