@@ -1,5 +1,5 @@
 import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
-import { WEAPON_RANGE, isBlack, isRed } from './deck';
+import { WEAPON_RANGE, isBlack, isRed, isShaCard } from './deck';
 import { alivePlayers, card, fail, hasSkill, player } from './kernel';
 import type { Ctx } from './kernel';
 
@@ -90,6 +90,10 @@ export function validateResponseCard(
       if (!hasSkill(s, p, 'qingguo')) fail('你没有倾国技能');
       if (!isBlack(c.suit)) fail('倾国需要黑色牌');
       return resp.cardId;
+  }
+  if (pattern === 'sha') {
+    if (!isShaCard(c.name)) fail('打出的牌与要求不符');
+    return resp.cardId;
   }
   if (c.name !== pattern) fail('打出的牌与要求不符');
   return resp.cardId;

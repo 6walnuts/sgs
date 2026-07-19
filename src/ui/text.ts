@@ -3,14 +3,16 @@ import type {
 } from '../engine/types';
 
 export const CARD_NAMES: Record<CardName, string> = {
-  sha: '杀', shan: '闪', tao: '桃',
+  sha: '杀', huosha: '火杀', leisha: '雷杀', shan: '闪', tao: '桃', jiu: '酒',
   guohe: '过河拆桥', shunshou: '顺手牵羊', wuzhong: '无中生有',
   juedou: '决斗', wuxie: '无懈可击', lebusishu: '乐不思蜀',
   nanman: '南蛮入侵', wanjian: '万箭齐发', wugu: '五谷丰登',
   taoyuan: '桃园结义', jiedao: '借刀杀人', shandian: '闪电',
+  huogong: '火攻', tiesuo: '铁索连环', bingliang: '兵粮寸断',
   cixiong: '雌雄双股剑', hanbing: '寒冰剑', zhangba: '丈八蛇矛',
   guanshi: '贯石斧', fangtian: '方天画戟', qilin: '麒麟弓', renwang: '仁王盾',
   zhugeliannu: '诸葛连弩', qinglongdao: '青龙偃月刀', baguazhen: '八卦阵',
+  zhuque: '朱雀羽扇', gudingdao: '古锭刀', tengjia: '藤甲', baiyin: '白银狮子',
   jiama: '+1马', jianma: '-1马',
 };
 
@@ -36,6 +38,7 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   lianying: '连营', jieyin: '结姻', xiaoji: '枭姬', wushuang: '无双',
   cixiong: '雌雄双股剑', hanbing: '寒冰剑', zhangba: '丈八蛇矛',
   guanshi: '贯石斧', fangtian: '方天画戟', qilin: '麒麟弓', renwang: '仁王盾',
+  tengjia: '藤甲', baiyin: '白银狮子', zhuque: '朱雀羽扇', gudingdao: '古锭刀',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -122,10 +125,16 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
           return null;
       }
     }
-    case 'damage':
+    case 'damage': {
+      const kind = ev.element === 'fire' ? '火焰伤害' : ev.element === 'thunder' ? '雷电伤害' : '伤害';
       return ev.source
-        ? `${label(ev.source)} 对 ${label(ev.target)} 造成了 ${ev.amount} 点伤害`
-        : `${label(ev.target)} 受到了 ${ev.amount} 点伤害`;
+        ? `${label(ev.source)} 对 ${label(ev.target)} 造成了 ${ev.amount} 点${kind}`
+        : `${label(ev.target)} 受到了 ${ev.amount} 点${kind}`;
+    }
+    case 'chained':
+      return ev.chained
+        ? `${label(ev.player)} 被横置(连环状态)`
+        : `${label(ev.player)} 重置(解除连环)`;
     case 'hpChanged':
       return ev.delta > 0
         ? `${label(ev.player)} 回复了 ${ev.delta} 点体力(${ev.hp})`
@@ -201,6 +210,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '贯石斧:弃置两张牌强制命中(不含贯石斧)';
         case 'cixiong-discard':
           return '雌雄双股剑:请弃置一张手牌';
+        case 'huogong-show':
+          return '火攻:请展示一张手牌';
+        case 'huogong-match': {
+          const suit = req.reason.suit ? SUIT_SYMBOLS[req.reason.suit] : '';
+          return `火攻:弃置一张 ${suit} 花色手牌,对 ${label(req.reason.target!)} 造成1点火焰伤害`;
+        }
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -223,6 +238,7 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'guanshi': return '是否发动【贯石斧】弃两张牌强制命中?';
         case 'qilin': return '是否发动【麒麟弓】弃置目标的一匹马?';
         case 'hanbing': return '是否发动【寒冰剑】防止伤害,改为弃置其两张牌?';
+        case 'zhuque': return '是否发动【朱雀羽扇】将此杀当作火杀?';
       }
       return '';
     case 'choose-player':
@@ -260,6 +276,7 @@ export const OPTION_LABELS: Record<string, string> = {
   guanshi: '发动贯石斧',
   qilin: '发动麒麟弓',
   hanbing: '发动寒冰剑',
+  zhuque: '当作火杀',
   'qilin-plus': '弃置 +1马',
   'qilin-minus': '弃置 -1马',
   spade: '♠ 黑桃',

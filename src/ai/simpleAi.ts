@@ -5,7 +5,7 @@
 import type {
   CardId, GameState, PendingRequest, PlayerId, PlayerState, ResponseData, Role,
 } from '../engine/types';
-import { isBlack, isRed } from '../engine/deck';
+import { isBlack, isRed, isShaCard } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
 import { attackRange, distance, kongchengProtected, shaLimit, shaUsed } from '../engine/rules';
 
@@ -46,6 +46,11 @@ function handOf(s: GameState, me: PlayerState, name: string): CardId[] {
   return me.hand.filter((id) => card(s, id).name === name);
 }
 
+// 所有种类的杀(普通/火/雷)
+function shaCards(s: GameState, me: PlayerState): CardId[] {
+  return me.hand.filter((id) => isShaCard(card(s, id).name));
+}
+
 // 牌的保留价值,弃牌/制衡时先丢低分牌
 function keepScore(s: GameState, me: PlayerState, id: CardId): number {
   const c = card(s, id);
@@ -63,6 +68,12 @@ function keepScore(s: GameState, me: PlayerState, id: CardId): number {
     case 'taoyuan': return 30;
     case 'jiedao': return 25;
     case 'shandian': return 20;
+    case 'huosha': return 36;
+    case 'leisha': return 36;
+    case 'jiu': return 45;
+    case 'huogong': return 40;
+    case 'tiesuo': return 22;
+    case 'bingliang': return 41;
     case 'juedou': return 40;
     case 'sha': return 35;
     default: {
@@ -221,13 +232,37 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     }
   }
 
-  // 15. 杀(含武圣/龙胆)
+  // 14.5 兵粮寸断 / 火攻 / 铁索重铸
+  const bl = handOf(s, p, 'bingliang');
+  if (bl.length > 0) {
+    const t = enemies.find(
+      (e) => distance(s, p.id, e.id) <= 1
+        && !e.judgeZone.some((id) => card(s, id).name === 'bingliang'),
+    );
+    if (t) return { kind: 'play-card', cardId: bl[0], targets: [t.id] };
+  }
+  const hg = handOf(s, p, 'huogong');
+  if (hg.length > 0 && p.hand.length >= 3) {
+    const t = enemies.find((e) => e.hand.length > 0);
+    if (t) return { kind: 'play-card', cardId: hg[0], targets: [t.id] };
+  }
+  const ts2 = handOf(s, p, 'tiesuo');
+  if (ts2.length > 0) {
+    return { kind: 'play-card', cardId: ts2[0], targets: [] }; // 简化:重铸换牌
+  }
+
+  // 15. 杀(含火杀/雷杀/武圣/龙胆)
   if (shaUsed(p) < shaLimit(s, p)) {
     const inRange = enemies
       .filter((e) => distance(s, p.id, e.id) <= attackRange(s, p) && !kongchengProtected(s, e))
       .sort((a, b) => a.hp - b.hp);
     if (inRange.length > 0) {
-      const sha = handOf(s, p, 'sha');
+      const sha = shaCards(s, p);
+      // 酒:攻击前先喝
+      const jiu = handOf(s, p, 'jiu');
+      if (sha.length > 0 && jiu.length > 0 && !p.flags.jiuUsed && !p.flags.jiuBuff) {
+        return { kind: 'play-card', cardId: jiu[0], targets: [] };
+      }
       if (sha.length > 0) {
         return { kind: 'play-card', cardId: sha[0], targets: [inRange[0].id] };
       }
@@ -277,7 +312,7 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
 
   // 16. 决斗:手里杀多时找敌人单挑
   const jd = handOf(s, p, 'juedou');
-  if (jd.length > 0 && handOf(s, p, 'sha').length >= 2 && enemies.length > 0) {
+  if (jd.length > 0 && shaCards(s, p).length >= 2 && enemies.length > 0) {
     const cands = enemies.filter((e) => !kongchengProtected(s, e));
     if (cands.length > 0) {
       const t = cands.sort((a, b) => a.hand.length - b.hand.length)[0];
@@ -296,7 +331,7 @@ function decideRespondCard(
       const shan = handOf(s, p, 'shan');
       if (shan.length > 0) return { kind: 'card', cardId: shan[0] };
       if (hasGeneralSkill(p, 'longdan')) {
-        const sha = handOf(s, p, 'sha');
+        const sha = handOf(s, p, 'sha'); // 龙胆仅普通杀可当闪
         if (sha.length > 0) return { kind: 'card', cardId: sha[0], skill: 'longdan' };
       }
       if (hasGeneralSkill(p, 'qingguo')) {
@@ -312,7 +347,7 @@ function decideRespondCard(
         // 借刀:目标非敌人时宁可交武器也不杀队友
         if (!t || !isEnemy(s, p.role, t)) return { kind: 'decline' };
       }
-      const sha = handOf(s, p, 'sha');
+      const sha = shaCards(s, p);
       if (sha.length > 0) return { kind: 'card', cardId: sha[0] };
       if (hasGeneralSkill(p, 'wusheng')) {
         const red = p.hand.find((id) => isRed(card(s, id).suit));
@@ -331,6 +366,10 @@ function decideRespondCard(
       if (!save) return { kind: 'decline' };
       const taos = handOf(s, p, 'tao');
       if (taos.length > 0) return { kind: 'card', cardId: taos[0] };
+      if (who.id === p.id) {
+        const jiu = handOf(s, p, 'jiu');
+        if (jiu.length > 0) return { kind: 'card', cardId: jiu[0] };
+      }
       if (hasGeneralSkill(p, 'jijiu') && s.turn.activePlayer !== p.id) {
         const red = p.hand.find((id) => isRed(card(s, id).suit));
         if (red !== undefined) return { kind: 'card', cardId: red, skill: 'jijiu' };
@@ -390,6 +429,9 @@ function decideOption(
     case 'hanbing':
       // 目标一血时直接打死,否则拆牌更赚
       return { kind: 'option', index: 0 };
+    case 'zhuque':
+      // 简化:总是转为火杀(可破藤甲、触发连环传导)
+      return { kind: 'option', index: 0 };
     default:
       // 八卦阵 / 奸雄 / 反馈 / 铁骑 / 遗计 / 洛神 / 观星 / 流离:总是发动
       return { kind: 'option', index: 0 };
@@ -425,6 +467,16 @@ function decideChooseCards(
     }
     case 'cixiong-discard':
       return { kind: 'cards', cardIds: sortByScoreAsc(s, p, p.hand).slice(0, 1) };
+    case 'huogong-show': {
+      // 展示最舍得亮的牌(低价值优先)
+      return { kind: 'cards', cardIds: sortByScoreAsc(s, p, p.hand).slice(0, 1) };
+    }
+    case 'huogong-match': {
+      const match = sortByScoreAsc(s, p, p.hand)
+        .filter((id) => card(s, id).suit === req.reason.suit);
+      if (match.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [match[0]] };
+    }
     default: {
       const sorted = sortByScoreAsc(s, p, p.hand);
       return { kind: 'cards', cardIds: sorted.slice(0, req.min) };

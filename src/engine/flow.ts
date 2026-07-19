@@ -70,7 +70,9 @@ export function flowRun(ctx: Ctx): void {
     case 'draw':
       if (!p.flags._draw) {
         p.flags._draw = true;
-        if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')) {
+        if (p.flags.skipDraw) {
+          emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'draw', reason: 'bingliang' });
+        } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
           let n = 2;
@@ -196,8 +198,61 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
     return;
   }
   switch (c.name) {
-    case 'sha': {
+    case 'sha':
+    case 'huosha':
+    case 'leisha': {
       startSlash(ctx, p, cardId, targets, undefined);
+      return;
+    }
+    case 'jiu': {
+      if (p.flags.jiuUsed) fail('每回合限使用一次酒');
+      p.flags.jiuUsed = true;
+      p.flags.jiuBuff = true; // 本回合下一张杀伤害 +1
+      moveCard(ctx, cardId, { zone: 'discard' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [p.id] });
+      return;
+    }
+    case 'huogong': {
+      const t = requireTarget(ctx, p, targets, true); // 火攻可以对自己
+      if (t.hand.length === 0) fail('目标没有手牌');
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
+      pushFrame(ctx, { type: 'huogong', step: 'start', cardId, source: p.id, target: t.id });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'tiesuo': {
+      if (targets.length === 0) {
+        // 重铸:弃置后摸一张
+        moveCard(ctx, cardId, { zone: 'discard' }, 'recast');
+        emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [], as: 'tiesuo' });
+        drawCards(ctx, p.id, 1);
+        return;
+      }
+      if (targets.length > 2 || new Set(targets).size !== targets.length) {
+        fail('铁索连环至多指定两名角色');
+      }
+      for (const pid of targets) {
+        if (!player(s, pid).alive) fail('目标已死亡');
+      }
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets });
+      pushFrame(ctx, {
+        type: 'tiesuo', step: 'next', cardId, source: p.id, queue: [...targets], idx: 0,
+      });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'bingliang': {
+      const t = requireTarget(ctx, p, targets);
+      if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > 1) {
+        fail('兵粮寸断只能指定距离 1 以内的目标');
+      }
+      if (t.judgeZone.some((id) => card(s, id).name === 'bingliang')) {
+        fail('目标的判定区已有兵粮寸断');
+      }
+      moveCard(ctx, cardId, { zone: 'judge', player: t.id }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
       return;
     }
     case 'tao': {
@@ -360,6 +415,8 @@ function startSlash(
   if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
   p.flags.sha = shaUsed(p) + 1;
   markShaUsage(ctx, p.id);
+  const jiuBonus = !!p.flags.jiuBuff;
+  p.flags.jiuBuff = false; // 酒的增益附着在这张杀上
   moveCard(ctx, cardId, { zone: 'processing' }, 'play');
   for (const id of extraCardIds) moveCard(ctx, id, { zone: 'processing' }, 'play');
   emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets, as: via ? 'sha' : undefined });
@@ -371,6 +428,7 @@ function startSlash(
       type: 'slash', step: 'start', source: p.id, target: targets[i], cardId,
       extraCardIds: extraCardIds.length > 0 ? [...extraCardIds] : undefined,
       noSuit: via === 'zhangba' ? true : undefined,
+      jiuBonus: jiuBonus ? true : undefined,
     });
   }
 }

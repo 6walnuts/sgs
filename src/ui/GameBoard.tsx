@@ -36,7 +36,10 @@ function targetsNeeded(
     return fangtian && lastHand ? [1, 3] : [1, 1];
   }
   if (name === 'jiedao') return [2, 2];
-  return ['guohe', 'shunshou', 'juedou', 'lebusishu'].includes(name) ? [1, 1] : [0, 0];
+  if (name === 'tiesuo') return [0, 2]; // 0 = 重铸
+  if (['huosha', 'leisha'].includes(name)) return [1, 1];
+  return ['guohe', 'shunshou', 'juedou', 'lebusishu', 'huogong', 'bingliang'].includes(name)
+    ? [1, 1] : [0, 0];
 }
 
 // 技能需要选择的牌数:[最少, 最多]
