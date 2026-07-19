@@ -110,6 +110,14 @@ export function decide(s: GameState, me: PlayerId, req: PendingRequest): Respons
     case 'choose-player': return decideChoosePlayer(s, p, req);
     case 'arrange-cards': return { kind: 'arrange', top: [...req.cardIds], bottom: [] };
     case 'pick-card': return decidePick(s, req);
+    case 'choose-general': {
+      // 简单启发:偏好体力高、有主动技能的武将
+      const best = req.candidates.slice().sort((a, b) => {
+        const score = (g: typeof a) => GENERALS[g].hp * 2 + GENERALS[g].activeSkills.length;
+        return score(b) - score(a);
+      })[0];
+      return { kind: 'general', general: best };
+    }
   }
 }
 
@@ -624,5 +632,7 @@ export function defaultResponse(s: GameState, req: PendingRequest): ResponseData
         : req.equips.length > 0
           ? { kind: 'pick', zone: 'equip', cardId: req.equips[0] }
           : { kind: 'pick', zone: 'judge', cardId: req.judges[0] };
+    case 'choose-general':
+      return { kind: 'general', general: req.candidates[0] };
   }
 }

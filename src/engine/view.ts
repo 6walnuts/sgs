@@ -29,11 +29,17 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
     if (p.id === viewer) continue;
     p.hand = p.hand.map(() => -1);
     if (!p.roleRevealed && !c.winner) p.role = 'loyalist';
+    // 选将中:他人的候选/占位武将不可见
+    if (p.unpicked) p.general = 'liubei';
   }
   c.eventLog = c.eventLog.map((ev) => redactEvent(ev, viewer));
   // 观星等展示牌堆内容的请求,内容只有被询问者可见
   if (c.pendingRequest?.type === 'arrange-cards' && c.pendingRequest.player !== viewer) {
     c.pendingRequest = { ...c.pendingRequest, cardIds: c.pendingRequest.cardIds.map(() => -1) };
+  }
+  // 选将候选只有被询问者可见
+  if (c.pendingRequest?.type === 'choose-general' && c.pendingRequest.player !== viewer) {
+    c.pendingRequest = { ...c.pendingRequest, candidates: [] };
   }
   return c;
 }

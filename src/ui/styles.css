@@ -311,6 +311,29 @@ body {
 .portrait-shu { border-color: #b04a3a; }
 .portrait-wu { border-color: #3f8a5a; }
 .portrait-qun { border-color: #8a8878; }
+.portrait-unknown {
+  display: flex; align-items: center; justify-content: center;
+  background: #2c443a; color: #7a9a88; font-size: 28px; font-weight: 700;
+}
+
+/* ---------- 选将 ---------- */
+
+.general-picks { justify-content: center; }
+.general-pick {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 12px; cursor: pointer;
+  background: #223c30; color: #e8e4da;
+  border: 2px solid #4a6a55; border-radius: 10px;
+}
+.general-pick:hover { border-color: #d8b84a; background: #2a4a3a; }
+.general-pick-name { font-size: 15px; font-weight: 700; display: flex; gap: 6px; align-items: center; }
+.general-pick-hp { color: #d05a5a; font-size: 12px; letter-spacing: 1px; }
+.general-pick-skills { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-width: 120px; }
+.faction { font-size: 11px; border-radius: 6px; padding: 0 5px; color: #fff; }
+.faction-wei { background: #3f6ea5; }
+.faction-shu { background: #b04a3a; }
+.faction-wu { background: #3f8a5a; }
+.faction-qun { background: #8a8878; }
 
 /* ---------- 判定区与观星 ---------- */
 

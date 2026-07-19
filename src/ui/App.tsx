@@ -9,7 +9,7 @@ type PlayerCount = 4 | 5 | 8;
 
 type Screen =
   | { kind: 'menu' }
-  | { kind: 'local'; playerCount: PlayerCount }
+  | { kind: 'local'; playerCount: PlayerCount; pickGenerals: boolean }
   | { kind: 'online'; intent: NetIntent };
 
 export function App() {
@@ -19,12 +19,18 @@ export function App() {
     case 'menu':
       return (
         <Menu
-          onLocal={(playerCount) => setScreen({ kind: 'local', playerCount })}
+          onLocal={(playerCount, pickGenerals) => setScreen({ kind: 'local', playerCount, pickGenerals })}
           onOnline={(intent) => setScreen({ kind: 'online', intent })}
         />
       );
     case 'local':
-      return <LocalPlay playerCount={screen.playerCount} onExit={toMenu} />;
+      return (
+        <LocalPlay
+          playerCount={screen.playerCount}
+          pickGenerals={screen.pickGenerals}
+          onExit={toMenu}
+        />
+      );
     case 'online':
       return <OnlinePlay intent={screen.intent} onExit={toMenu} />;
   }
@@ -33,12 +39,13 @@ export function App() {
 // ---------- 主菜单 ----------
 
 function Menu({ onLocal, onOnline }: {
-  onLocal: (playerCount: PlayerCount) => void;
+  onLocal: (playerCount: PlayerCount, pickGenerals: boolean) => void;
   onOnline: (intent: NetIntent) => void;
 }) {
   const [name, setName] = useState('玩家');
   const [roomId, setRoomId] = useState('');
   const [playerCount, setPlayerCount] = useState<PlayerCount>(4);
+  const [pickGenerals, setPickGenerals] = useState(true);
   return (
     <div className="menu">
       <h1 className="menu-title">三国杀</h1>
@@ -55,7 +62,22 @@ function Menu({ onLocal, onOnline }: {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount)}>
+        <div className="menu-row">
+          <label>选将</label>
+          <button
+            className={pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => setPickGenerals(true)}
+          >
+            自选武将
+          </button>
+          <button
+            className={!pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => setPickGenerals(false)}
+          >
+            随机分配
+          </button>
+        </div>
+        <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount, pickGenerals)}>
           单机游戏(1 人 + {playerCount - 1} AI)
         </button>
         <div className="menu-row">
@@ -64,7 +86,7 @@ function Menu({ onLocal, onOnline }: {
         </div>
         <button
           className="btn btn-primary menu-btn"
-          onClick={() => onOnline({ kind: 'create', name, playerCount })}
+          onClick={() => onOnline({ kind: 'create', name, playerCount, pickGenerals })}
         >
           创建联机房间
         </button>
@@ -92,13 +114,18 @@ function Menu({ onLocal, onOnline }: {
 
 // ---------- 单机 ----------
 
-function LocalPlay({ playerCount, onExit }: { playerCount: PlayerCount; onExit: () => void }) {
+function LocalPlay({ playerCount, pickGenerals, onExit }: {
+  playerCount: PlayerCount;
+  pickGenerals: boolean;
+  onExit: () => void;
+}) {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   return (
     <LocalSession
       key={seed}
       seed={seed}
       playerCount={playerCount}
+      pickGenerals={pickGenerals}
       onRestart={() => setSeed(Math.floor(Math.random() * 1e9))}
       onExit={onExit}
     />
@@ -115,13 +142,17 @@ function useToast(): [string | null, (msg: string) => void] {
   return [toast, setToast];
 }
 
-function LocalSession({ seed, playerCount, onRestart, onExit }: {
+function LocalSession({ seed, playerCount, pickGenerals, onRestart, onExit }: {
   seed: number;
   playerCount: PlayerCount;
+  pickGenerals: boolean;
   onRestart: () => void;
   onExit: () => void;
 }) {
-  const game = useMemo(() => new LocalGame(seed, playerCount), [seed, playerCount]);
+  const game = useMemo(
+    () => new LocalGame(seed, playerCount, pickGenerals),
+    [seed, playerCount, pickGenerals],
+  );
   const [state, setState] = useState<GameState>(game.state);
   const [toast, setToast] = useToast();
 

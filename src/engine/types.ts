@@ -73,6 +73,7 @@ export interface PlayerState {
   chained?: boolean; // 铁索连环:横置状态,属性伤害解除并传导
   flipped?: boolean; // 武将牌翻面:回合开始时翻回并跳过该回合
   buqu?: CardId[];   // 周泰"不屈"的创牌(明置)
+  unpicked?: boolean; // 选将模式:尚未选定武将(general 为占位值)
   judgeZone: CardId[]; // 延时锦囊,后放置的先结算
   flags: Record<string, number | boolean>; // 回合内计数,回合结束清空
 }
@@ -303,6 +304,15 @@ export interface JushouFrame {
   player: PlayerId;
 }
 
+// 开局选将:主公先选,其余角色按座次依次选;全部选定后发起始手牌
+export interface ChooseGeneralsFrame {
+  type: 'choose-generals';
+  step: 'next' | 'wait';
+  queue: PlayerId[];
+  idx: number;
+  candidates: Record<PlayerId, GeneralId[]>;
+}
+
 export interface TiesuoFrame {
   type: 'tiesuo';
   step: 'next' | 'after-wuxie';
@@ -319,7 +329,8 @@ export type EffectFrame =
   | GuanxingFrame | LuoshenFrame | DrawStepFrame | DelayedFrame
   | KurouFrame | FanjianFrame | AoeFrame | JiedaoFrame
   | HuogongFrame | TiesuoFrame
-  | ShensuFrame | LeijiFrame | GuhuoFrame | JushouFrame;
+  | ShensuFrame | LeijiFrame | GuhuoFrame | JushouFrame
+  | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
 
@@ -364,7 +375,9 @@ export type PendingRequest =
       cardIds: CardId[]; reason: 'guanxing' }
   | { id: number; player: PlayerId; type: 'pick-card';
       target: PlayerId; handCount: number; equips: CardId[]; judges: CardId[];
-      reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' };
+      reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' }
+  | { id: number; player: PlayerId; type: 'choose-general';
+      candidates: GeneralId[] };
 
 export type ResponseData =
   | { kind: 'play-card'; cardId: CardId; targets: PlayerId[] }
@@ -377,6 +390,7 @@ export type ResponseData =
   | { kind: 'players'; players: PlayerId[] }                      // 应答 choose-player
   | { kind: 'arrange'; top: CardId[]; bottom: CardId[] }          // 应答 arrange-cards
   | { kind: 'pick'; zone: 'hand' | 'equip' | 'judge'; cardId?: CardId }
+  | { kind: 'general'; general: GeneralId }                       // 应答 choose-general
   | { kind: 'decline' };
 
 export interface Action {
@@ -405,6 +419,7 @@ export type GameEvent =
   | { type: 'reshuffled' }
   | { type: 'cardRevealed'; player: PlayerId; cardId: CardId; reason: string }
   | { type: 'playerDied'; player: PlayerId; role: Role; killer: PlayerId | null }
+  | { type: 'generalChosen'; player: PlayerId; general: GeneralId }
   | { type: 'gameOver'; winner: Role[] };
 
 // ---------- GameState ----------

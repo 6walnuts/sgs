@@ -3,11 +3,11 @@
 // 因此任意暂停点序列化/反序列化后都能继续结算。
 
 import type {
-  AoeFrame, CardId, DamageFrame, DelayedFrame, DrawStepFrame, DuelFrame,
-  DyingFrame, EffectFrame, FanjianFrame, GuanxingFrame, GuhuoFrame,
-  HuogongFrame, JiedaoFrame, JudgeFrame, JushouFrame, KurouFrame, LeijiFrame,
-  LuoshenFrame, PendingRequest, PlayerId, ResponseData, ShensuFrame,
-  SlashFrame, TiesuoFrame, TrickFrame, WuxieFrame,
+  AoeFrame, CardId, ChooseGeneralsFrame, DamageFrame, DelayedFrame,
+  DrawStepFrame, DuelFrame, DyingFrame, EffectFrame, FanjianFrame,
+  GuanxingFrame, GuhuoFrame, HuogongFrame, JiedaoFrame, JudgeFrame,
+  JushouFrame, KurouFrame, LeijiFrame, LuoshenFrame, PendingRequest, PlayerId,
+  ResponseData, ShensuFrame, SlashFrame, TiesuoFrame, TrickFrame, WuxieFrame,
 } from './types';
 import {
   EngineError, alivePlayers, ask, card, drawCards, emit, equipCardIds, fail,
@@ -2032,9 +2032,41 @@ const guhuo: FrameHandler<GuhuoFrame> = {
   },
 };
 
+// ---------- 开局选将 ----------
+
+const chooseGenerals: FrameHandler<ChooseGeneralsFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    if (f.idx >= f.queue.length) {
+      // 全部选定:发起始手牌,开始主公回合
+      for (const pid of orderFrom(s)) drawCards(ctx, pid, 4);
+      popFrame(ctx, f);
+      emit(ctx, { type: 'turnStarted', player: s.turn.activePlayer, turnNumber: 1 });
+      return;
+    }
+    const pid = f.queue[f.idx];
+    ask(ctx, { player: pid, type: 'choose-general', candidates: f.candidates[pid] });
+    f.step = 'wait';
+  },
+  onResponse(ctx, f, resp) {
+    if (resp.kind !== 'general') fail('请从候选中选择一名武将');
+    const pid = f.queue[f.idx];
+    if (!f.candidates[pid].includes(resp.general)) fail('只能从你的候选武将中选择');
+    const p = player(ctx.s, pid);
+    p.general = resp.general;
+    p.maxHp = GENERALS[resp.general].hp + (p.role === 'lord' ? 1 : 0);
+    p.hp = p.maxHp;
+    delete p.unpicked;
+    emit(ctx, { type: 'generalChosen', player: pid, general: resp.general });
+    f.idx++;
+    f.step = 'next';
+  },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const frameHandlers: Record<EffectFrame['type'], FrameHandler<any>> = {
   slash, damage, dying, judge, wuxie, trick, duel,
   guanxing, luoshen, 'draw-step': drawStep, delayed, kurou, fanjian, aoe, jiedao,
   huogong, tiesuo, shensu, jushou, leiji, guhuo,
+  'choose-generals': chooseGenerals,
 };

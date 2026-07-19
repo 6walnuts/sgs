@@ -13,7 +13,10 @@ import type { GameConfig, PlayerCount } from './setup';
 export function createGame(config: GameConfig): EngineResult {
   const s = buildInitialState(config);
   const ctx: Ctx = { s, events: [] };
-  emit(ctx, { type: 'turnStarted', player: s.turn.activePlayer, turnNumber: 1 });
+  // 选将模式下由 choose-generals 帧在选定后发牌并宣布回合开始
+  if (s.stack.length === 0) {
+    emit(ctx, { type: 'turnStarted', player: s.turn.activePlayer, turnNumber: 1 });
+  }
   advance(ctx);
   return { state: s, events: ctx.events };
 }

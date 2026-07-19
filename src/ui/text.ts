@@ -66,6 +66,10 @@ export const ROLE_NAMES: Record<Role, string> = {
   lord: '主公', loyalist: '忠臣', rebel: '反贼', spy: '内奸',
 };
 
+export const FACTION_NAMES: Record<string, string> = {
+  wei: '魏', shu: '蜀', wu: '吴', qun: '群',
+};
+
 export const SUIT_SYMBOLS: Record<string, string> = {
   spade: '♠', heart: '♥', club: '♣', diamond: '♦',
 };
@@ -89,6 +93,7 @@ export function seatLabel(s: GameState, pid: PlayerId): string {
 export function playerLabel(s: GameState, pid: PlayerId, humanId?: PlayerId): string {
   const p = s.players.find((x) => x.id === pid)!;
   const you = humanId !== undefined && pid === humanId ? '(你)' : '';
+  if (p.unpicked) return `${seatLabel(s, pid)}${you}`;
   return `${GENERAL_NAMES[p.general]}${you}`;
 }
 
@@ -172,6 +177,8 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
     }
     case 'cardRevealed':
       return `${label(ev.player)} 展示了 ${cardLabel(s, ev.cardId)}`;
+    case 'generalChosen':
+      return `${seatLabel(s, ev.player)} 选择了武将 ${GENERAL_NAMES[ev.general]}`;
     case 'flipped':
       return ev.flipped
         ? `${label(ev.player)} 的武将牌翻面(将跳过一个回合)`
@@ -293,6 +300,10 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
     case 'pick-card': {
       const what = req.reason === 'guohe' ? '弃置' : '获得';
       return `选择要${what}的 ${label(req.target)} 的一张牌`;
+    }
+    case 'choose-general': {
+      const me = s.players.find((x) => x.id === req.player)!;
+      return me.role === 'lord' ? '你是主公,请选择你的武将' : '请选择你的武将';
     }
   }
 }

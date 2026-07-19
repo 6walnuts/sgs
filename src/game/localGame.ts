@@ -14,8 +14,8 @@ export class LocalGame {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private paused = true;
 
-  constructor(seed: number, playerCount: 4 | 5 | 8 = 4) {
-    this.state = createGame({ seed, playerCount }).state;
+  constructor(seed: number, playerCount: 4 | 5 | 8 = 4, pickGenerals = false) {
+    this.state = createGame({ seed, playerCount, pickGenerals }).state;
   }
 
   onChange(fn: (s: GameState) => void): () => void {

@@ -35,17 +35,19 @@ export function Seat({
     >
       <div className="seat-header">
         <span className="seat-no">{p.seat + 1}号</span>
-        <span className="seat-general">{GENERAL_NAMES[p.general]}</span>
+        <span className="seat-general">{p.unpicked ? '选将中…' : GENERAL_NAMES[p.general]}</span>
         {pid === humanId && <span className="seat-you">你</span>}
         <span className={roleVisible ? `role role-${p.role}` : 'role role-hidden'}>
           {roleVisible ? ROLE_NAMES[p.role] : '?'}
         </span>
       </div>
       <div className="seat-body">
-        <GeneralPortrait general={p.general} />
+        {p.unpicked
+          ? <div className="portrait portrait-unknown">?</div>
+          : <GeneralPortrait general={p.general} />}
         <div className="seat-col">
           <div className="seat-skills">
-            {GENERALS[p.general].skills.map((sk) => (
+            {!p.unpicked && GENERALS[p.general].skills.map((sk) => (
               <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
             ))}
           </div>

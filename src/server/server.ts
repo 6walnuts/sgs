@@ -42,6 +42,7 @@ class Room {
   members: Member[] = [];
   state: GameState | null = null;
   playerCount: 4 | 5 | 8 = 4;
+  pickGenerals = false;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -109,6 +110,7 @@ class Room {
     this.state = createGame({
       seed: randomBytes(4).readUInt32BE(0),
       playerCount: this.playerCount,
+      pickGenerals: this.pickGenerals,
     }).state;
     this.broadcastRoom();
     this.broadcastSync();
@@ -228,6 +230,7 @@ export function createServer(options: ServerOptions) {
           while (rooms.has(id)) id = makeRoomId();
           const room = new Room(id, opts, (r) => rooms.delete(r.id));
           if (msg.playerCount === 5 || msg.playerCount === 8) room.playerCount = msg.playerCount;
+          room.pickGenerals = !!msg.pickGenerals;
           rooms.set(id, room);
           const member = room.join(ws, msg.name);
           if (typeof member === 'string') send(ws, { type: 'error', message: member });

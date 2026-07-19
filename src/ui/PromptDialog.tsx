@@ -5,7 +5,11 @@ import type { GameState, PendingRequest, PlayerId, ResponseData } from '../engin
 import { isBlack, isRed } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
-import { OPTION_LABELS, SKILL_NAMES, describeRequest, playerLabel, seatLabel } from './text';
+import { GeneralPortrait } from './portraits';
+import {
+  FACTION_NAMES, GENERAL_NAMES, OPTION_LABELS, SKILL_NAMES,
+  describeRequest, playerLabel, seatLabel,
+} from './text';
 
 const TIMEOUT_SECONDS = 20;
 
@@ -267,6 +271,33 @@ export function PromptDialog({
               ))}
             </div>
           </>
+        );
+      case 'choose-general':
+        return (
+          <div className="dialog-cards general-picks">
+            {req.candidates.map((g) => {
+              const def = GENERALS[g];
+              return (
+                <button
+                  key={g}
+                  className="general-pick"
+                  onClick={() => onSubmit({ kind: 'general', general: g })}
+                >
+                  <GeneralPortrait general={g} />
+                  <div className="general-pick-name">
+                    {GENERAL_NAMES[g]}
+                    <span className={`faction faction-${def.faction}`}>{FACTION_NAMES[def.faction]}</span>
+                  </div>
+                  <div className="general-pick-hp">{'❤'.repeat(def.hp)}</div>
+                  <div className="general-pick-skills">
+                    {def.skills.map((sk) => (
+                      <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         );
       default:
         return null;
