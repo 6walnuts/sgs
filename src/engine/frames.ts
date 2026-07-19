@@ -3,10 +3,10 @@
 // 因此任意暂停点序列化/反序列化后都能继续结算。
 
 import type {
-  CardId, DamageFrame, DelayedFrame, DrawStepFrame, DuelFrame, DyingFrame,
-  EffectFrame, FanjianFrame, GuanxingFrame, JudgeFrame, KurouFrame,
-  LuoshenFrame, PendingRequest, PlayerId, ResponseData, SlashFrame,
-  TrickFrame, WuxieFrame,
+  AoeFrame, CardId, DamageFrame, DelayedFrame, DrawStepFrame, DuelFrame,
+  DyingFrame, EffectFrame, FanjianFrame, GuanxingFrame, JiedaoFrame,
+  JudgeFrame, KurouFrame, LuoshenFrame, PendingRequest, PlayerId,
+  ResponseData, SlashFrame, TrickFrame, WuxieFrame,
 } from './types';
 import {
   alivePlayers, ask, card, drawCards, emit, equipCardIds, fail,
@@ -16,7 +16,7 @@ import {
 } from './kernel';
 import type { Ctx } from './kernel';
 import { isBlack, isRed } from './deck';
-import { attackRange, distance, validateResponseCard } from './rules';
+import { armorName, attackRange, distance, validateResponseCard, weaponName } from './rules';
 import { GENERALS } from './generals';
 
 export interface FrameHandler<F extends EffectFrame = EffectFrame> {
@@ -96,22 +96,51 @@ const slash: FrameHandler<SlashFrame> = {
           return;
         }
         f.tiejiDone = true;
-        f.step = 'cycle';
+        f.step = 'cixiong';
         return;
       }
       case 'tieji-judged': {
         const res = f.childResult;
         f.childResult = undefined;
         if (res && isRed(card(s, res.cardId).suit)) f.noDodge = true;
+        f.step = 'cixiong';
+        return;
+      }
+      case 'cixiong': {
+        // 雌雄双股剑:对异性使用杀时,其弃一张手牌或令你摸一张
+        if (!f.cxDone && weaponName(s, src) === 'cixiong' && tgt.alive
+            && GENERALS[src.general].gender !== GENERALS[tgt.general].gender) {
+          f.cxDone = true;
+          emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'cixiong' });
+          if (tgt.hand.length === 0) {
+            drawCards(ctx, f.source, 1);
+          } else {
+            ask(ctx, {
+              player: f.target, type: 'choose-option',
+              options: ['cixiong-discard', 'cixiong-draw'], canDecline: false, reason: 'cixiong-choice',
+            });
+            f.step = 'cixiong-wait';
+            return;
+          }
+        }
+        f.cxDone = true;
         f.step = 'cycle';
         return;
       }
       case 'cycle': {
         if (!tgt.alive) { f.step = 'finish'; return; }
+        // 仁王盾:黑色的杀无效(丈八的无花色杀除外)
+        if (!f.rwChecked) {
+          f.rwChecked = true;
+          if (!f.noSuit && armorName(s, tgt) === 'renwang' && isBlack(card(s, f.cardId).suit)) {
+            emit(ctx, { type: 'skillInvoked', player: f.target, skill: 'renwang' });
+            f.step = 'finish';
+            return;
+          }
+        }
         if (f.noDodge) { f.step = 'hit'; return; }
         if ((f.dodgesGot ?? 0) >= (f.dodgesNeeded ?? 1)) { f.step = 'dodged'; return; }
-        const armor = tgt.equips.armor;
-        if (armor !== undefined && card(s, armor).name === 'baguazhen') {
+        if (armorName(s, tgt) === 'baguazhen') {
           ask(ctx, { player: f.target, type: 'choose-option', options: ['bagua'], canDecline: true, reason: 'bagua' });
           f.step = 'bagua-wait';
         } else {
@@ -140,8 +169,19 @@ const slash: FrameHandler<SlashFrame> = {
         return;
       }
       case 'dodged': {
-        const w = src.equips.weapon;
-        if (src.alive && tgt.alive && w !== undefined && card(s, w).name === 'qinglongdao') {
+        // 贯石斧:被闪抵消后可弃两张牌(不含贯石斧)强制命中
+        if (!f.gsDone && src.alive && tgt.alive && weaponName(s, src) === 'guanshi') {
+          const axe = src.equips.weapon!;
+          const usable = src.hand.length + equipCardIds(src).filter((id) => id !== axe).length;
+          if (usable >= 2) {
+            f.gsDone = true;
+            ask(ctx, { player: f.source, type: 'choose-option', options: ['guanshi'], canDecline: true, reason: 'guanshi' });
+            f.step = 'guanshi-wait';
+            return;
+          }
+        }
+        f.gsDone = true;
+        if (src.alive && tgt.alive && weaponName(s, src) === 'qinglongdao') {
           ask(ctx, {
             player: f.source, type: 'respond-card', pattern: 'sha', canDecline: true,
             reason: { kind: 'qinglong', target: f.target },
@@ -153,16 +193,40 @@ const slash: FrameHandler<SlashFrame> = {
         return;
       }
       case 'hit': {
+        // 麒麟弓:命中后可弃置目标的一匹马
+        if (!f.qilinDone && weaponName(s, src) === 'qilin' && tgt.alive
+            && (tgt.equips.horsePlus !== undefined || tgt.equips.horseMinus !== undefined)) {
+          f.qilinDone = true;
+          const options: string[] = [];
+          if (tgt.equips.horsePlus !== undefined) options.push('qilin-plus');
+          if (tgt.equips.horseMinus !== undefined) options.push('qilin-minus');
+          ask(ctx, { player: f.source, type: 'choose-option', options, canDecline: true, reason: 'qilin' });
+          f.step = 'qilin-wait';
+          return;
+        }
+        // 寒冰剑:可防止伤害,改为依次弃置目标两张牌
+        if (!f.hanbingDone && weaponName(s, src) === 'hanbing' && tgt.alive
+            && totalCardCount(tgt) > 0) {
+          f.hanbingDone = true;
+          ask(ctx, { player: f.source, type: 'choose-option', options: ['hanbing'], canDecline: true, reason: 'hanbing' });
+          f.step = 'hanbing-wait';
+          return;
+        }
+        f.step = 'do-damage';
+        return;
+      }
+      case 'do-damage': {
         const bonus = src.flags.luoyi ? 1 : 0; // 裸衣:杀的伤害 +1
         pushDamage(ctx, {
           source: f.source, target: f.target, amount: 1 + bonus,
-          causeCardIds: [f.cardId], causeKind: 'sha',
+          causeCardIds: [f.cardId, ...(f.extraCardIds ?? [])], causeKind: 'sha',
         });
         f.step = 'finish';
         return;
       }
       case 'finish': {
         discardIfProcessing(ctx, f.cardId);
+        for (const id of f.extraCardIds ?? []) discardIfProcessing(ctx, id);
         popFrame(ctx, f);
         return;
       }
@@ -170,7 +234,7 @@ const slash: FrameHandler<SlashFrame> = {
         fail(`slash 帧在 ${f.step} 步不应被 run`);
     }
   },
-  onResponse(ctx, f, resp) {
+  onResponse(ctx, f, resp, req) {
     const s = ctx.s;
     switch (f.step) {
       case 'liuli-wait': {
@@ -208,17 +272,41 @@ const slash: FrameHandler<SlashFrame> = {
         moveCard(ctx, f.liuliCard!, { zone: 'discard' }, 'liuli');
         f.liuliCard = undefined;
         f.target = r.players[0];
-        f.step = 'start'; // 新目标重新结算(流离/铁骑/八卦对新目标生效)
+        f.step = 'start'; // 新目标重新结算
         f.tiejiDone = false;
+        f.cxDone = false;
+        f.rwChecked = false;
         return;
       }
       case 'tieji-wait': {
         const r = expectDeclineOr(resp, 'option');
         f.tiejiDone = true;
-        if (!r) { f.step = 'cycle'; return; }
+        if (!r) { f.step = 'cixiong'; return; }
         emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'tieji' });
         pushFrame(ctx, { type: 'judge', step: 'flip', player: f.source, reason: 'tieji' });
         f.step = 'tieji-judged';
+        return;
+      }
+      case 'cixiong-wait': {
+        if (resp.kind !== 'option') fail('必须做出选择');
+        if (resp.index === 0) {
+          ask(ctx, {
+            player: f.target, type: 'choose-cards', from: 'hand',
+            min: 1, max: 1, canDecline: false, reason: { kind: 'cixiong-discard' },
+          });
+          f.step = 'cixiong-discard';
+        } else {
+          drawCards(ctx, f.source, 1);
+          f.step = 'cycle';
+        }
+        return;
+      }
+      case 'cixiong-discard': {
+        if (resp.kind !== 'cards' || resp.cardIds.length !== 1) fail('需要弃置一张手牌');
+        const tgt = player(s, f.target);
+        if (!tgt.hand.includes(resp.cardIds[0])) fail('所选牌不在手牌中');
+        moveCard(ctx, resp.cardIds[0], { zone: 'discard' }, 'cixiong');
+        f.step = 'cycle';
         return;
       }
       case 'bagua-wait': {
@@ -241,6 +329,33 @@ const slash: FrameHandler<SlashFrame> = {
         f.step = 'cycle';
         return;
       }
+      case 'guanshi-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { f.step = 'dodged'; return; }
+        const src = player(s, f.source);
+        ask(ctx, {
+          player: f.source, type: 'choose-cards', from: 'hand-equips',
+          min: 2, max: 2, excludeIds: [src.equips.weapon!],
+          canDecline: true, reason: { kind: 'guanshi-discard' },
+        });
+        f.step = 'guanshi-cards';
+        return;
+      }
+      case 'guanshi-cards': {
+        const r = expectDeclineOr(resp, 'cards');
+        if (!r) { f.step = 'dodged'; return; }
+        const src = player(s, f.source);
+        const axe = src.equips.weapon;
+        if (r.cardIds.length !== 2 || new Set(r.cardIds).size !== 2) fail('需要弃置两张牌');
+        for (const id of r.cardIds) {
+          if (id === axe) fail('不能弃置贯石斧本身');
+          if (!src.hand.includes(id) && !equipCardIds(src).includes(id)) fail('所选牌不属于你');
+        }
+        emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'guanshi' });
+        moveCards(ctx, r.cardIds, { zone: 'discard' }, 'guanshi');
+        f.step = 'hit'; // 强制命中
+        return;
+      }
       case 'qinglong-wait': {
         const r = expectDeclineOr(resp, 'card');
         if (!r) { f.step = 'finish'; return; }
@@ -248,6 +363,9 @@ const slash: FrameHandler<SlashFrame> = {
         emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'qinglong' });
         markShaUsage(ctx, f.source);
         discardIfProcessing(ctx, f.cardId);
+        for (const id of f.extraCardIds ?? []) discardIfProcessing(ctx, id);
+        f.extraCardIds = undefined;
+        f.noSuit = false;
         moveCard(ctx, cid, { zone: 'processing' }, 'play');
         emit(ctx, {
           type: 'cardPlayed', player: f.source, cardId: cid, targets: [f.target],
@@ -256,12 +374,55 @@ const slash: FrameHandler<SlashFrame> = {
         if (r.skill === 'wusheng') emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'wusheng' });
         if (r.skill === 'longdan') emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'longdan' });
         f.cardId = cid;
-        // 新的一次杀结算:流离/铁骑/八卦重新生效
+        // 新的一次杀结算:流离/铁骑/八卦/雌雄/仁王重新生效
         f.step = 'start';
         f.dodgesGot = 0;
         f.noDodge = false;
         f.liuliDone = false;
         f.tiejiDone = false;
+        f.cxDone = false;
+        f.rwChecked = false;
+        f.gsDone = false;
+        f.qilinDone = false;
+        f.hanbingDone = false;
+        return;
+      }
+      case 'qilin-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (r && req.type === 'choose-option') {
+          const tgt = player(s, f.target);
+          const which = req.options[r.index];
+          const horse = which === 'qilin-plus' ? tgt.equips.horsePlus : tgt.equips.horseMinus;
+          if (horse === undefined) fail('目标没有这匹马');
+          emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'qilin' });
+          moveCard(ctx, horse, { zone: 'discard' }, 'qilin');
+        }
+        f.step = 'hit';
+        return;
+      }
+      case 'hanbing-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { f.step = 'do-damage'; return; }
+        emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'hanbing' });
+        askHanbingPick(ctx, f);
+        f.step = 'hanbing-pick1';
+        return;
+      }
+      case 'hanbing-pick1': {
+        const cid = resolvePick(ctx, f.target, resp);
+        moveCard(ctx, cid, { zone: 'discard' }, 'hanbing');
+        if (totalCardCount(player(s, f.target)) > 0) {
+          askHanbingPick(ctx, f);
+          f.step = 'hanbing-pick2';
+        } else {
+          f.step = 'finish'; // 伤害被防止
+        }
+        return;
+      }
+      case 'hanbing-pick2': {
+        const cid = resolvePick(ctx, f.target, resp);
+        moveCard(ctx, cid, { zone: 'discard' }, 'hanbing');
+        f.step = 'finish'; // 伤害被防止
         return;
       }
       default:
@@ -269,6 +430,14 @@ const slash: FrameHandler<SlashFrame> = {
     }
   },
 };
+
+function askHanbingPick(ctx: Ctx, f: SlashFrame): void {
+  const tgt = player(ctx.s, f.target);
+  ask(ctx, {
+    player: f.source, type: 'pick-card', target: f.target,
+    handCount: tgt.hand.length, equips: equipCardIds(tgt), judges: [], reason: 'hanbing',
+  });
+}
 
 function liuliCandidates(ctx: Ctx, f: SlashFrame): PlayerId[] {
   const s = ctx.s;
@@ -981,7 +1150,10 @@ const delayed: FrameHandler<DelayedFrame> = {
           f.step = 'next';
           return;
         }
-        pushFrame(ctx, { type: 'judge', step: 'flip', player: f.who, reason: 'lebusishu' });
+        pushFrame(ctx, {
+          type: 'judge', step: 'flip', player: f.who,
+          reason: card(s, cur).name === 'shandian' ? 'shandian' : 'lebusishu',
+        });
         f.step = 'judged';
         return;
       }
@@ -989,12 +1161,42 @@ const delayed: FrameHandler<DelayedFrame> = {
         const res = f.childResult;
         f.childResult = undefined;
         const cur = f.current!;
+        const curName = card(s, cur).name;
+        if (curName === 'shandian') {
+          const jc = res?.cardId !== undefined ? card(s, res.cardId) : null;
+          const struck = jc !== null && jc.suit === 'spade' && jc.rank >= 2 && jc.rank <= 9;
+          if (struck) {
+            if (who.judgeZone.includes(cur)) moveCard(ctx, cur, { zone: 'processing' }, 'shandian');
+            pushDamage(ctx, { source: null, target: f.who, amount: 3, causeCardIds: [cur] });
+            f.step = 'cleanup';
+            return;
+          }
+          // 未命中:闪电移到下一名判定区没有闪电的存活角色
+          const order = orderFrom(s, f.who).filter((pid) => pid !== f.who);
+          const nextOwner = order.find((pid) => {
+            const q = player(s, pid);
+            return q.alive && !q.judgeZone.some((id) => card(s, id).name === 'shandian');
+          });
+          if (nextOwner !== undefined && who.judgeZone.includes(cur)) {
+            moveCard(ctx, cur, { zone: 'judge', player: nextOwner }, 'shandian');
+          } else if (who.judgeZone.includes(cur)) {
+            moveCard(ctx, cur, { zone: 'discard' }, 'shandian');
+          }
+          f.step = 'next';
+          return;
+        }
+        // 乐不思蜀:非红桃则跳过出牌阶段
         if (res?.cardId !== undefined && card(s, res.cardId).suit !== 'heart') {
           who.flags.skipPlay = true;
         }
         if (who.judgeZone.includes(cur)) {
           moveCard(ctx, cur, { zone: 'discard' }, 'delayed');
         }
+        f.step = 'next';
+        return;
+      }
+      case 'cleanup': {
+        discardIfProcessing(ctx, f.current ?? null);
         f.step = 'next';
         return;
       }
@@ -1048,8 +1250,180 @@ const fanjian: FrameHandler<FanjianFrame> = {
   },
 };
 
+// ---------- AOE 锦囊:南蛮入侵/万箭齐发/桃园结义/五谷丰登 ----------
+
+const aoe: FrameHandler<AoeFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    switch (f.step) {
+      case 'next': {
+        if (f.idx >= f.queue.length) {
+          // 五谷剩余的牌进弃牌堆
+          for (const id of f.shownIds ?? []) discardIfProcessing(ctx, id);
+          discardIfProcessing(ctx, f.cardId);
+          popFrame(ctx, f);
+          return;
+        }
+        const tgt = player(s, f.queue[f.idx]);
+        if (!tgt.alive
+            || (f.effName === 'taoyuan' && tgt.hp >= tgt.maxHp)
+            || (f.effName === 'wugu' && (f.shownIds ?? []).length === 0)) {
+          f.idx++;
+          return;
+        }
+        pushFrame(ctx, {
+          type: 'wuxie', step: 'ask', negated: false, idx: 0,
+          info: { cardName: f.effName, source: f.source, target: tgt.id },
+        });
+        f.step = 'after-wuxie';
+        return;
+      }
+      case 'after-wuxie': {
+        const negated = f.childResult?.negated ?? false;
+        f.childResult = undefined;
+        const tgtId = f.queue[f.idx];
+        if (negated) {
+          emit(ctx, { type: 'nullified', cardName: f.effName, target: tgtId });
+          f.idx++;
+          f.step = 'next';
+          return;
+        }
+        switch (f.effName) {
+          case 'nanman':
+            ask(ctx, {
+              player: tgtId, type: 'respond-card', pattern: 'sha', canDecline: true,
+              reason: { kind: 'aoe', source: f.source, cardName: 'nanman' },
+            });
+            f.step = 'card-wait';
+            return;
+          case 'wanjian':
+            ask(ctx, {
+              player: tgtId, type: 'respond-card', pattern: 'shan', canDecline: true,
+              reason: { kind: 'aoe', source: f.source, cardName: 'wanjian' },
+            });
+            f.step = 'card-wait';
+            return;
+          case 'taoyuan':
+            heal(ctx, tgtId, 1);
+            f.idx++;
+            f.step = 'next';
+            return;
+          case 'wugu':
+            ask(ctx, {
+              player: tgtId, type: 'choose-cards', from: 'shown',
+              shownIds: [...f.shownIds!], min: 1, max: 1,
+              canDecline: false, reason: { kind: 'wugu' },
+            });
+            f.step = 'pick-wait';
+            return;
+        }
+        return;
+      }
+      default:
+        fail(`aoe 帧在 ${f.step} 步不应被 run`);
+    }
+  },
+  onResponse(ctx, f, resp) {
+    const tgtId = f.queue[f.idx];
+    switch (f.step) {
+      case 'card-wait': {
+        const r = expectDeclineOr(resp, 'card');
+        if (!r) {
+          pushDamage(ctx, {
+            source: f.source, target: tgtId, amount: 1, causeCardIds: [f.cardId],
+          });
+        } else {
+          const pattern = f.effName === 'nanman' ? 'sha' : 'shan';
+          const cid = validateResponseCard(ctx, tgtId, r, pattern);
+          moveCard(ctx, cid, { zone: 'discard' }, 'respond');
+          emit(ctx, { type: 'cardResponded', player: tgtId, cardId: cid, as: r.skill ? pattern : undefined });
+        }
+        f.idx++;
+        f.step = 'next';
+        return;
+      }
+      case 'pick-wait': {
+        if (resp.kind !== 'cards' || resp.cardIds.length !== 1) fail('需要选择一张牌');
+        const cid = resp.cardIds[0];
+        if (!f.shownIds!.includes(cid)) fail('只能选择亮出的牌');
+        moveCard(ctx, cid, { zone: 'hand', player: tgtId }, 'wugu');
+        f.shownIds = f.shownIds!.filter((id) => id !== cid);
+        f.idx++;
+        f.step = 'next';
+        return;
+      }
+      default:
+        fail(`aoe 帧在 ${f.step} 步不接受应答`);
+    }
+  },
+};
+
+// ---------- 借刀杀人 ----------
+
+const jiedao: FrameHandler<JiedaoFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    switch (f.step) {
+      case 'start': {
+        pushFrame(ctx, {
+          type: 'wuxie', step: 'ask', negated: false, idx: 0,
+          info: { cardName: 'jiedao', source: f.source, target: f.a },
+        });
+        f.step = 'after-wuxie';
+        return;
+      }
+      case 'after-wuxie': {
+        const negated = f.childResult?.negated ?? false;
+        f.childResult = undefined;
+        const a = player(s, f.a);
+        const b = player(s, f.b);
+        if (negated || !a.alive || !b.alive || a.equips.weapon === undefined) {
+          if (negated) emit(ctx, { type: 'nullified', cardName: 'jiedao', target: f.a });
+          discardIfProcessing(ctx, f.cardId);
+          popFrame(ctx, f);
+          return;
+        }
+        ask(ctx, {
+          player: f.a, type: 'respond-card', pattern: 'sha', canDecline: true,
+          reason: { kind: 'jiedao', source: f.source, target: f.b },
+        });
+        f.step = 'sha-wait';
+        return;
+      }
+      default:
+        fail(`jiedao 帧在 ${f.step} 步不应被 run`);
+    }
+  },
+  onResponse(ctx, f, resp) {
+    const s = ctx.s;
+    if (f.step !== 'sha-wait') fail('jiedao 帧当前不接受应答');
+    const r = expectDeclineOr(resp, 'card');
+    discardIfProcessing(ctx, f.cardId);
+    if (!r) {
+      // 不出杀:武器交给借刀者
+      const a = player(s, f.a);
+      const weapon = a.equips.weapon;
+      popFrame(ctx, f);
+      if (weapon !== undefined) {
+        moveCard(ctx, weapon, { zone: 'hand', player: f.source }, 'jiedao');
+      }
+      return;
+    }
+    const cid = validateResponseCard(ctx, f.a, r, 'sha');
+    moveCard(ctx, cid, { zone: 'processing' }, 'play');
+    emit(ctx, {
+      type: 'cardPlayed', player: f.a, cardId: cid, targets: [f.b],
+      as: r.skill ? 'sha' : undefined,
+    });
+    if (r.skill === 'wusheng') emit(ctx, { type: 'skillInvoked', player: f.a, skill: 'wusheng' });
+    if (r.skill === 'longdan') emit(ctx, { type: 'skillInvoked', player: f.a, skill: 'longdan' });
+    popFrame(ctx, f);
+    pushFrame(ctx, { type: 'slash', step: 'start', source: f.a, target: f.b, cardId: cid });
+  },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const frameHandlers: Record<EffectFrame['type'], FrameHandler<any>> = {
   slash, damage, dying, judge, wuxie, trick, duel,
-  guanxing, luoshen, 'draw-step': drawStep, delayed, kurou, fanjian,
+  guanxing, luoshen, 'draw-step': drawStep, delayed, kurou, fanjian, aoe, jiedao,
 };

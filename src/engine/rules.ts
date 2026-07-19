@@ -1,5 +1,5 @@
 import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
-import { isBlack, isRed } from './deck';
+import { WEAPON_RANGE, isBlack, isRed } from './deck';
 import { alivePlayers, card, fail, hasSkill, player } from './kernel';
 import type { Ctx } from './kernel';
 
@@ -22,8 +22,18 @@ export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
 
 export function attackRange(s: GameState, p: PlayerState): number {
   const w = p.equips.weapon;
-  if (w !== undefined && card(s, w).name === 'qinglongdao') return 3;
-  return 1;
+  if (w === undefined) return 1;
+  return WEAPON_RANGE[card(s, w).name] ?? 1;
+}
+
+export function weaponName(s: GameState, p: PlayerState): string | null {
+  const w = p.equips.weapon;
+  return w === undefined ? null : card(s, w).name;
+}
+
+export function armorName(s: GameState, p: PlayerState): string | null {
+  const a = p.equips.armor;
+  return a === undefined ? null : card(s, a).name;
 }
 
 export function shaLimit(s: GameState, p: PlayerState): number {

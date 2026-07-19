@@ -57,6 +57,12 @@ function keepScore(s: GameState, me: PlayerState, id: CardId): number {
     case 'shunshou': return 50;
     case 'guohe': return 45;
     case 'lebusishu': return 42;
+    case 'nanman': return 44;
+    case 'wanjian': return 44;
+    case 'wugu': return 46;
+    case 'taoyuan': return 30;
+    case 'jiedao': return 25;
+    case 'shandian': return 20;
     case 'juedou': return 40;
     case 'sha': return 35;
     default: {
@@ -240,6 +246,35 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     }
   }
 
+  // 15.5 群体锦囊与借刀
+  const nm = [...handOf(s, p, 'nanman'), ...handOf(s, p, 'wanjian')];
+  if (nm.length > 0 && enemies.length >= Math.max(1, allies.length)) {
+    return { kind: 'play-card', cardId: nm[0], targets: [] };
+  }
+  const wugu = handOf(s, p, 'wugu');
+  if (wugu.length > 0) return { kind: 'play-card', cardId: wugu[0], targets: [] };
+  const ty = handOf(s, p, 'taoyuan');
+  if (ty.length > 0 && p.hp < p.maxHp) {
+    return { kind: 'play-card', cardId: ty[0], targets: [] };
+  }
+  const jd2 = handOf(s, p, 'jiedao');
+  if (jd2.length > 0) {
+    for (const a of enemies) {
+      if (a.equips.weapon === undefined) continue;
+      const b = s.players.find(
+        (x) => x.alive && x.id !== a.id
+          && distance(s, a.id, x.id) <= attackRange(s, a)
+          && isEnemy(s, p.role, x) && !kongchengProtected(s, x),
+      );
+      if (b) return { kind: 'play-card', cardId: jd2[0], targets: [a.id, b.id] };
+    }
+  }
+  const sd = handOf(s, p, 'shandian');
+  if (sd.length > 0 && p.hp >= 3
+      && !p.judgeZone.some((id) => card(s, id).name === 'shandian')) {
+    return { kind: 'play-card', cardId: sd[0], targets: [] };
+  }
+
   // 16. 决斗:手里杀多时找敌人单挑
   const jd = handOf(s, p, 'juedou');
   if (jd.length > 0 && handOf(s, p, 'sha').length >= 2 && enemies.length > 0) {
@@ -272,8 +307,9 @@ function decideRespondCard(
     }
     case 'sha': {
       // 决斗中被迫出杀 / 青龙刀追杀
-      if (req.reason.kind === 'qinglong') {
+      if (req.reason.kind === 'qinglong' || req.reason.kind === 'jiedao') {
         const t = req.reason.target ? player(s, req.reason.target) : null;
+        // 借刀:目标非敌人时宁可交武器也不杀队友
         if (!t || !isEnemy(s, p.role, t)) return { kind: 'decline' };
       }
       const sha = handOf(s, p, 'sha');
@@ -344,6 +380,16 @@ function decideOption(
       // 只对敌人发动(伤害来源在栈里,简化:总是发动)
       return { kind: 'option', index: 0 };
     }
+    case 'cixiong-choice':
+      // 手牌富余就弃一张,否则让攻击者摸
+      return p.hand.length >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
+    case 'guanshi': {
+      const junk = p.hand.filter((id) => keepScore(s, p, id) <= 40);
+      return junk.length >= 2 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    }
+    case 'hanbing':
+      // 目标一血时直接打死,否则拆牌更赚
+      return { kind: 'option', index: 0 };
     default:
       // 八卦阵 / 奸雄 / 反馈 / 铁骑 / 遗计 / 洛神 / 观星 / 流离:总是发动
       return { kind: 'option', index: 0 };
@@ -365,6 +411,20 @@ function decideChooseCards(
       if (worst !== undefined) return { kind: 'cards', cardIds: [worst] };
       return { kind: 'decline' };
     }
+    case 'wugu': {
+      const shown = req.shownIds ?? [];
+      const best = shown.slice().sort((a, b) => keepScore(s, p, b) - keepScore(s, p, a))[0];
+      return { kind: 'cards', cardIds: [best] };
+    }
+    case 'guanshi-discard': {
+      const junk = sortByScoreAsc(s, p, p.hand)
+        .filter((id) => !(req.excludeIds ?? []).includes(id))
+        .slice(0, 2);
+      if (junk.length < 2) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: junk };
+    }
+    case 'cixiong-discard':
+      return { kind: 'cards', cardIds: sortByScoreAsc(s, p, p.hand).slice(0, 1) };
     default: {
       const sorted = sortByScoreAsc(s, p, p.hand);
       return { kind: 'cards', cardIds: sorted.slice(0, req.min) };
@@ -446,6 +506,9 @@ export function defaultResponse(s: GameState, req: PendingRequest): ResponseData
     case 'choose-option': return req.canDecline ? { kind: 'decline' } : { kind: 'option', index: 0 };
     case 'choose-cards': {
       if (req.canDecline) return { kind: 'decline' };
+      if (req.from === 'shown') {
+        return { kind: 'cards', cardIds: (req.shownIds ?? []).slice(0, req.min) };
+      }
       const p = s.players.find((x) => x.id === req.player)!;
       return { kind: 'cards', cardIds: p.hand.slice(0, req.min) };
     }

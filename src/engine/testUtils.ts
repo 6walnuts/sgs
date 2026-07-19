@@ -3,7 +3,7 @@
 import { expect } from 'vitest';
 import { applyAction, createGame } from './engine';
 import type { CardId, CardName, GameState, GeneralId, PlayerId, ResponseData, Role } from './types';
-import { isRed } from './deck';
+import { equipSlotOf, isRed } from './deck';
 
 // 通用规则测试里把武将统一为无被动干扰技能的甘宁(奇袭是主动技),
 // 需要特定武将的用例自行覆盖 general 字段
@@ -67,10 +67,9 @@ export function equip(s: GameState, pid: PlayerId, name: CardName): CardId {
   const id = findCard(s, name);
   removeEverywhere(s, id);
   const p = s.players.find((x) => x.id === pid)!;
-  if (name === 'baguazhen') p.equips.armor = id;
-  else if (name === 'jiama') p.equips.horsePlus = id;
-  else if (name === 'jianma') p.equips.horseMinus = id;
-  else p.equips.weapon = id;
+  const slot = equipSlotOf(name);
+  if (!slot) throw new Error(`${name} 不是装备牌`);
+  p.equips[slot] = id;
   return id;
 }
 

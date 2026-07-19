@@ -8,8 +8,12 @@ export type Suit = 'spade' | 'heart' | 'club' | 'diamond';
 
 export type CardName =
   | 'sha' | 'shan' | 'tao'
-  | 'guohe' | 'shunshou' | 'wuzhong' | 'juedou' | 'wuxie' | 'lebusishu'
-  | 'zhugeliannu' | 'qinglongdao' | 'baguazhen' | 'jiama' | 'jianma';
+  | 'guohe' | 'shunshou' | 'wuzhong' | 'juedou' | 'wuxie'
+  | 'nanman' | 'wanjian' | 'wugu' | 'taoyuan' | 'jiedao'
+  | 'lebusishu' | 'shandian'
+  | 'zhugeliannu' | 'qinglongdao' | 'cixiong' | 'hanbing' | 'zhangba'
+  | 'guanshi' | 'fangtian' | 'qilin'
+  | 'baguazhen' | 'renwang' | 'jiama' | 'jianma';
 
 export interface Card {
   id: CardId;
@@ -41,7 +45,9 @@ export type SkillName =
   | 'jizhi' | 'qicai'
   | 'keji' | 'kurou' | 'yingzi' | 'fanjian' | 'guose' | 'liuli'
   | 'qianxun' | 'lianying' | 'jieyin' | 'xiaoji'
-  | 'wushuang';
+  | 'wushuang'
+  // 武器/防具触发(以技能事件形式记录日志)
+  | 'cixiong' | 'hanbing' | 'zhangba' | 'guanshi' | 'fangtian' | 'qilin' | 'renwang';
 
 export interface PlayerState {
   id: PlayerId;
@@ -70,16 +76,26 @@ export interface SlashFrame {
   type: 'slash';
   step: 'start' | 'liuli-wait' | 'liuli-cards' | 'liuli-player'
       | 'tieji' | 'tieji-wait' | 'tieji-judged'
+      | 'cixiong' | 'cixiong-wait' | 'cixiong-discard'
       | 'cycle' | 'bagua-wait' | 'bagua-judged' | 'ask-shan' | 'shan-wait'
-      | 'dodged' | 'qinglong-wait' | 'hit' | 'finish';
+      | 'dodged' | 'guanshi-wait' | 'guanshi-cards' | 'qinglong-wait'
+      | 'hit' | 'qilin-wait' | 'hanbing-wait' | 'hanbing-pick1' | 'hanbing-pick2'
+      | 'do-damage' | 'finish';
   source: PlayerId;
   target: PlayerId;
   cardId: CardId;
+  extraCardIds?: CardId[]; // 丈八蛇矛:两张牌当杀,一并进弃牌堆
+  noSuit?: boolean;        // 丈八的杀无花色(仁王盾不生效)
   dodgesNeeded?: number;   // 无双 = 2
   dodgesGot?: number;
   noDodge?: boolean;       // 铁骑判红:不能闪
   liuliDone?: boolean;
   tiejiDone?: boolean;
+  cxDone?: boolean;        // 雌雄双股剑已询问
+  rwChecked?: boolean;     // 仁王盾已检查
+  gsDone?: boolean;        // 贯石斧已询问
+  qilinDone?: boolean;
+  hanbingDone?: boolean;
   liuliCard?: CardId;
   childResult?: { cardId: CardId };
 }
@@ -116,7 +132,7 @@ export interface JudgeFrame {
   type: 'judge';
   step: 'flip' | 'guicai' | 'guicai-wait';
   player: PlayerId;
-  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu';
+  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian';
   cardId?: CardId;
   queue?: PlayerId[];
   idx?: number;
@@ -173,7 +189,7 @@ export interface DrawStepFrame {
 
 export interface DelayedFrame {
   type: 'delayed';
-  step: 'next' | 'after-wuxie' | 'judged';
+  step: 'next' | 'after-wuxie' | 'judged' | 'cleanup';
   who: PlayerId;
   queue: CardId[];
   current?: CardId;
@@ -194,17 +210,41 @@ export interface FanjianFrame {
   suit?: Suit;
 }
 
+// AOE 锦囊:南蛮入侵/万箭齐发/桃园结义/五谷丰登,逐目标结算(每个目标可被无懈)
+export interface AoeFrame {
+  type: 'aoe';
+  step: 'next' | 'after-wuxie' | 'card-wait' | 'pick-wait';
+  effName: 'nanman' | 'wanjian' | 'taoyuan' | 'wugu';
+  cardId: CardId;
+  source: PlayerId;
+  queue: PlayerId[];
+  idx: number;
+  shownIds?: CardId[]; // 五谷丰登亮出的牌
+  childResult?: { negated: boolean };
+}
+
+export interface JiedaoFrame {
+  type: 'jiedao';
+  step: 'start' | 'after-wuxie' | 'sha-wait';
+  cardId: CardId;
+  source: PlayerId;
+  a: PlayerId; // 持武器者
+  b: PlayerId; // 被指定的杀目标
+  childResult?: { negated: boolean };
+}
+
 export type EffectFrame =
   | SlashFrame | DamageFrame | DyingFrame | JudgeFrame
   | WuxieFrame | TrickFrame | DuelFrame
   | GuanxingFrame | LuoshenFrame | DrawStepFrame | DelayedFrame
-  | KurouFrame | FanjianFrame;
+  | KurouFrame | FanjianFrame | AoeFrame | JiedaoFrame;
 
 // ---------- 请求-响应 ----------
 
 export interface RequestReason {
   kind: 'slash' | 'duel' | 'qinglong' | 'dying' | 'nullify' | 'discard' | 'guicai'
-      | 'liuli' | 'ganglie-discard' | 'yiji' | 'tuxi';
+      | 'liuli' | 'ganglie-discard' | 'yiji' | 'tuxi'
+      | 'aoe' | 'jiedao' | 'wugu' | 'guanshi-discard' | 'cixiong-discard';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -215,7 +255,8 @@ export interface RequestReason {
 export type OptionReason =
   | 'bagua' | 'jianxiong' | 'fankui'
   | 'liuli' | 'tieji' | 'ganglie' | 'ganglie-choice'
-  | 'yiji' | 'luoshen' | 'guanxing' | 'tuxi' | 'luoyi' | 'fanjian-suit';
+  | 'yiji' | 'luoshen' | 'guanxing' | 'tuxi' | 'luoyi' | 'fanjian-suit'
+  | 'cixiong-choice' | 'guanshi' | 'qilin' | 'hanbing';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }
@@ -223,7 +264,8 @@ export type PendingRequest =
       pattern: 'shan' | 'sha' | 'tao' | 'wuxie';
       canDecline: true; reason: RequestReason }
   | { id: number; player: PlayerId; type: 'choose-cards';
-      from: 'hand' | 'hand-equips'; min: number; max: number;
+      from: 'hand' | 'hand-equips' | 'shown'; min: number; max: number;
+      shownIds?: CardId[]; excludeIds?: CardId[];
       canDecline: boolean; reason: RequestReason }
   | { id: number; player: PlayerId; type: 'choose-option';
       options: string[]; canDecline: boolean;
@@ -235,7 +277,7 @@ export type PendingRequest =
       cardIds: CardId[]; reason: 'guanxing' }
   | { id: number; player: PlayerId; type: 'pick-card';
       target: PlayerId; handCount: number; equips: CardId[]; judges: CardId[];
-      reason: 'guohe' | 'shunshou' | 'fankui' };
+      reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' };
 
 export type ResponseData =
   | { kind: 'play-card'; cardId: CardId; targets: PlayerId[] }

@@ -24,6 +24,21 @@ const SPECS: Array<{ name: CardName; suit: Suit; ranks: number[] }> = [
   { name: 'lebusishu', suit: 'spade', ranks: [6] },
   { name: 'lebusishu', suit: 'heart', ranks: [6] },
   { name: 'lebusishu', suit: 'club', ranks: [6] },
+  { name: 'nanman', suit: 'spade', ranks: [7, 13] },
+  { name: 'nanman', suit: 'club', ranks: [7] },
+  { name: 'wanjian', suit: 'heart', ranks: [1] },
+  { name: 'wugu', suit: 'heart', ranks: [3, 4] },
+  { name: 'taoyuan', suit: 'heart', ranks: [1] },
+  { name: 'jiedao', suit: 'club', ranks: [12, 13] },
+  { name: 'shandian', suit: 'spade', ranks: [1] },
+  { name: 'shandian', suit: 'heart', ranks: [12] },
+  { name: 'cixiong', suit: 'spade', ranks: [2] },
+  { name: 'hanbing', suit: 'spade', ranks: [2] },
+  { name: 'zhangba', suit: 'spade', ranks: [12] },
+  { name: 'guanshi', suit: 'diamond', ranks: [5] },
+  { name: 'fangtian', suit: 'diamond', ranks: [12] },
+  { name: 'qilin', suit: 'heart', ranks: [5] },
+  { name: 'renwang', suit: 'club', ranks: [2] },
   { name: 'zhugeliannu', suit: 'club', ranks: [1] },
   { name: 'zhugeliannu', suit: 'diamond', ranks: [1] },
   { name: 'qinglongdao', suit: 'spade', ranks: [5] },
@@ -61,8 +76,15 @@ export function equipSlotOf(name: CardName): EquipSlot | null {
   switch (name) {
     case 'zhugeliannu':
     case 'qinglongdao':
+    case 'cixiong':
+    case 'hanbing':
+    case 'zhangba':
+    case 'guanshi':
+    case 'fangtian':
+    case 'qilin':
       return 'weapon';
     case 'baguazhen':
+    case 'renwang':
       return 'armor';
     case 'jiama':
       return 'horsePlus';
@@ -72,6 +94,17 @@ export function equipSlotOf(name: CardName): EquipSlot | null {
       return null;
   }
 }
+
+export const WEAPON_RANGE: Partial<Record<CardName, number>> = {
+  zhugeliannu: 1,
+  cixiong: 2,
+  hanbing: 2,
+  qinglongdao: 3,
+  zhangba: 3,
+  guanshi: 3,
+  fangtian: 4,
+  qilin: 5,
+};
 
 export function isEquip(name: CardName): boolean {
   return equipSlotOf(name) !== null;

@@ -6,6 +6,10 @@ export const CARD_NAMES: Record<CardName, string> = {
   sha: '杀', shan: '闪', tao: '桃',
   guohe: '过河拆桥', shunshou: '顺手牵羊', wuzhong: '无中生有',
   juedou: '决斗', wuxie: '无懈可击', lebusishu: '乐不思蜀',
+  nanman: '南蛮入侵', wanjian: '万箭齐发', wugu: '五谷丰登',
+  taoyuan: '桃园结义', jiedao: '借刀杀人', shandian: '闪电',
+  cixiong: '雌雄双股剑', hanbing: '寒冰剑', zhangba: '丈八蛇矛',
+  guanshi: '贯石斧', fangtian: '方天画戟', qilin: '麒麟弓', renwang: '仁王盾',
   zhugeliannu: '诸葛连弩', qinglongdao: '青龙偃月刀', baguazhen: '八卦阵',
   jiama: '+1马', jianma: '-1马',
 };
@@ -30,6 +34,8 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   jizhi: '集智', qicai: '奇才', keji: '克己', kurou: '苦肉', yingzi: '英姿',
   fanjian: '反间', guose: '国色', liuli: '流离', qianxun: '谦逊',
   lianying: '连营', jieyin: '结姻', xiaoji: '枭姬', wushuang: '无双',
+  cixiong: '雌雄双股剑', hanbing: '寒冰剑', zhangba: '丈八蛇矛',
+  guanshi: '贯石斧', fangtian: '方天画戟', qilin: '麒麟弓', renwang: '仁王盾',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -44,6 +50,7 @@ export const SKILL_HINTS: Record<string, string> = {
   jieyin: '弃两张手牌,令一名已受伤的男性角色与你各回复1点体力(每回合一次)',
   fanjian: '令一名角色猜花色并随机获得你一张手牌,猜错则受到1点伤害(每回合一次)',
   guose: '将一张方块牌当乐不思蜀使用',
+  zhangba: '将两张手牌当杀使用(无花色)',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -160,6 +167,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return `与 ${label(r.source!)} 决斗中,是否打出杀?`;
         case 'qinglong':
           return `青龙偃月刀:是否立即对 ${label(r.target!)} 再使用一张杀?`;
+        case 'aoe':
+          return r.cardName === 'nanman'
+            ? `${label(r.source!)} 使用了南蛮入侵,是否打出杀?`
+            : `${label(r.source!)} 使用了万箭齐发,是否打出闪?`;
+        case 'jiedao':
+          return `${label(r.source!)} 借刀杀人:对 ${label(r.target!)} 使用杀,否则将武器交给对方`;
         case 'dying':
           return r.who === req.player
             ? '你处于濒死状态,是否使用桃?'
@@ -182,6 +195,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '刚烈:请弃置两张手牌';
         case 'yiji':
           return '遗计:选择要分给其他角色的牌(不选则全部保留)';
+        case 'wugu':
+          return '五谷丰登:选择一张牌获得';
+        case 'guanshi-discard':
+          return '贯石斧:弃置两张牌强制命中(不含贯石斧)';
+        case 'cixiong-discard':
+          return '雌雄双股剑:请弃置一张手牌';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -200,6 +219,10 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'tuxi': return '是否发动【突袭】放弃摸牌,改为获得至多两名角色各一张手牌?';
         case 'luoyi': return '是否发动【裸衣】少摸一张牌,本回合杀/决斗伤害+1?';
         case 'fanjian-suit': return '反间:猜一种花色(猜错将受到1点伤害)';
+        case 'cixiong-choice': return '雌雄双股剑:弃一张手牌,或令攻击者摸一张牌';
+        case 'guanshi': return '是否发动【贯石斧】弃两张牌强制命中?';
+        case 'qilin': return '是否发动【麒麟弓】弃置目标的一匹马?';
+        case 'hanbing': return '是否发动【寒冰剑】防止伤害,改为弃置其两张牌?';
       }
       return '';
     case 'choose-player':
@@ -232,6 +255,13 @@ export const OPTION_LABELS: Record<string, string> = {
   guanxing: '发动观星',
   tuxi: '发动突袭',
   luoyi: '发动裸衣',
+  'cixiong-discard': '弃一张手牌',
+  'cixiong-draw': '令其摸一张牌',
+  guanshi: '发动贯石斧',
+  qilin: '发动麒麟弓',
+  hanbing: '发动寒冰剑',
+  'qilin-plus': '弃置 +1马',
+  'qilin-minus': '弃置 -1马',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',

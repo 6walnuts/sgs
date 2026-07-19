@@ -122,9 +122,13 @@ export function PromptDialog({
           </>
         );
       case 'choose-cards': {
-        const selectable = req.from === 'hand-equips'
-          ? [...human.hand, ...Object.values(human.equips).filter((x): x is number => x !== undefined)]
-          : human.hand;
+        const exclude = req.excludeIds ?? [];
+        const selectable = (req.from === 'shown'
+          ? (req.shownIds ?? [])
+          : req.from === 'hand-equips'
+            ? [...human.hand, ...Object.values(human.equips).filter((x): x is number => x !== undefined)]
+            : human.hand
+        ).filter((id) => !exclude.includes(id));
         const toggle = (id: number) => {
           setPicked((cur) => (cur.includes(id)
             ? cur.filter((x) => x !== id)

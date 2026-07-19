@@ -3,15 +3,15 @@
 
 import type { PendingRequest, Phase, PlayerId, PlayerState, ResponseData } from './types';
 import {
-  ask, card, drawCards, emit, equipCardIds, fail, hasSkill, heal, loseHp,
-  markShaUsage, moveCard, moveCards, player, pushFrame,
+  ask, card, drawCards, emit, equipCardIds, fail, flipToProcessing, hasSkill,
+  heal, loseHp, markShaUsage, moveCard, moveCards, orderFrom, player, pushFrame,
 } from './kernel';
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed } from './deck';
 import {
   assertInHand, attackRange, distance, kongchengProtected, shaLimit, shaUsed,
 } from './rules';
-import { pushSlash, pushTrick } from './frames';
+import { pushTrick } from './frames';
 import { GENERALS } from './generals';
 
 function setPhase(ctx: Ctx, phase: Phase): void {
@@ -197,8 +197,7 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
   }
   switch (c.name) {
     case 'sha': {
-      const t = requireTarget(ctx, p, targets);
-      startSlash(ctx, p, cardId, t, undefined);
+      startSlash(ctx, p, cardId, targets, undefined);
       return;
     }
     case 'tao': {
@@ -257,6 +256,69 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
       placeLebusishu(ctx, p, cardId, t);
       return;
     }
+    case 'shandian': {
+      if (p.judgeZone.some((id) => card(s, id).name === 'shandian')) {
+        fail('你的判定区已有闪电');
+      }
+      moveCard(ctx, cardId, { zone: 'judge', player: p.id }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [p.id] });
+      return;
+    }
+    case 'nanman':
+    case 'wanjian': {
+      const queue = orderFrom(s).filter((pid) => pid !== p.id);
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
+      pushFrame(ctx, {
+        type: 'aoe', step: 'next', effName: c.name, cardId, source: p.id, queue, idx: 0,
+      });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'taoyuan': {
+      const queue = orderFrom(s);
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
+      pushFrame(ctx, {
+        type: 'aoe', step: 'next', effName: 'taoyuan', cardId, source: p.id, queue, idx: 0,
+      });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'wugu': {
+      const queue = orderFrom(s);
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
+      const shown: number[] = [];
+      for (let i = 0; i < queue.length; i++) {
+        const id = flipToProcessing(ctx);
+        shown.push(id);
+        emit(ctx, { type: 'cardRevealed', player: p.id, cardId: id, reason: 'wugu' });
+      }
+      pushFrame(ctx, {
+        type: 'aoe', step: 'next', effName: 'wugu', cardId, source: p.id,
+        queue, idx: 0, shownIds: shown,
+      });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'jiedao': {
+      if (targets.length !== 2 || targets[0] === targets[1]) fail('借刀杀人需要选择持武器者与杀的目标');
+      const a = player(s, targets[0]);
+      const b = player(s, targets[1]);
+      if (!a.alive || !b.alive) fail('目标已死亡');
+      if (a.id === p.id) fail('不能以自己为借刀目标');
+      if (a.equips.weapon === undefined) fail('目标没有装备武器');
+      if (kongchengProtected(s, b)) fail('空城:该角色不能成为杀的目标');
+      if (distance(s, a.id, b.id) > attackRange(s, a)) fail('杀的目标须在持武器者的攻击范围内');
+      moveCard(ctx, cardId, { zone: 'processing' }, 'play');
+      emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [a.id, b.id] });
+      pushFrame(ctx, {
+        type: 'jiedao', step: 'start', cardId, source: p.id, a: a.id, b: b.id,
+      });
+      afterTrickUse(ctx, p);
+      return;
+    }
     default:
       fail(`无法使用 ${c.name}`);
   }
@@ -273,20 +335,44 @@ function placeLebusishu(ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState
 }
 
 function startSlash(
-  ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState,
-  via: 'wusheng' | 'longdan' | undefined,
+  ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[],
+  via: 'wusheng' | 'longdan' | 'zhangba' | undefined,
+  extraCardIds: number[] = [],
 ): void {
   const s = ctx.s;
-  if (t.id === p.id) fail('不能对自己使用杀');
-  if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
+  if (targets.length === 0) fail('需要选择目标');
+  if (new Set(targets).size !== targets.length) fail('不能重复选择目标');
+  if (targets.length > 1) {
+    // 方天画戟:杀是最后的手牌时可指定至多三个目标
+    const w = p.equips.weapon;
+    const isFangtian = w !== undefined && card(s, w).name === 'fangtian';
+    const isLastHand = p.hand.length === 1 && p.hand[0] === cardId;
+    if (!isFangtian || !isLastHand) fail('只有方天画戟且杀是最后的手牌时才能指定多个目标');
+    if (targets.length > 3) fail('方天画戟至多指定三个目标');
+  }
+  const ts = targets.map((id) => player(s, id));
+  for (const t of ts) {
+    if (!t.alive) fail('目标已死亡');
+    if (t.id === p.id) fail('不能对自己使用杀');
+    if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
+    if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
+  }
   if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
-  if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
   p.flags.sha = shaUsed(p) + 1;
   markShaUsage(ctx, p.id);
   moveCard(ctx, cardId, { zone: 'processing' }, 'play');
-  emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id], as: via ? 'sha' : undefined });
+  for (const id of extraCardIds) moveCard(ctx, id, { zone: 'processing' }, 'play');
+  emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets, as: via ? 'sha' : undefined });
   if (via) emit(ctx, { type: 'skillInvoked', player: p.id, skill: via });
-  pushSlash(ctx, p.id, t.id, cardId);
+  if (targets.length > 1) emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'fangtian' });
+  // 逆序压栈:先结算第一个目标;牌在全部结算完后由最后弹出的帧弃置
+  for (let i = targets.length - 1; i >= 0; i--) {
+    ctx.s.stack.push({
+      type: 'slash', step: 'start', source: p.id, target: targets[i], cardId,
+      extraCardIds: extraCardIds.length > 0 ? [...extraCardIds] : undefined,
+      noSuit: via === 'zhangba' ? true : undefined,
+    });
+  }
 }
 
 function useSkill(
@@ -299,8 +385,7 @@ function useSkill(
       if (cardIds.length !== 1) fail('武圣需要选择一张红色牌');
       assertInHand(s, p, cardIds[0]);
       if (!isRed(card(s, cardIds[0]).suit)) fail('武圣需要红色牌');
-      const t = requireTarget(ctx, p, targets);
-      startSlash(ctx, p, cardIds[0], t, 'wusheng');
+      startSlash(ctx, p, cardIds[0], targets, 'wusheng');
       return;
     }
     case 'longdan': {
@@ -308,8 +393,7 @@ function useSkill(
       if (cardIds.length !== 1) fail('龙胆需要选择一张闪');
       assertInHand(s, p, cardIds[0]);
       if (card(s, cardIds[0]).name !== 'shan') fail('龙胆出牌时需将闪当杀使用');
-      const t = requireTarget(ctx, p, targets);
-      startSlash(ctx, p, cardIds[0], t, 'longdan');
+      startSlash(ctx, p, cardIds[0], targets, 'longdan');
       return;
     }
     case 'rende': {
@@ -419,6 +503,14 @@ function useSkill(
       moveCards(ctx, cardIds, { zone: 'discard' }, 'jieyin');
       heal(ctx, t.id, 1);
       heal(ctx, p.id, 1);
+      return;
+    }
+    case 'zhangba': {
+      const w = p.equips.weapon;
+      if (w === undefined || card(s, w).name !== 'zhangba') fail('你没有装备丈八蛇矛');
+      if (cardIds.length !== 2 || new Set(cardIds).size !== 2) fail('丈八蛇矛需要两张手牌');
+      for (const id of cardIds) assertInHand(s, p, id);
+      startSlash(ctx, p, cardIds[0], targets, 'zhangba', [cardIds[1]]);
       return;
     }
     case 'fanjian': {
