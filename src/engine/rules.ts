@@ -56,6 +56,16 @@ export function kongchengProtected(s: GameState, t: PlayerState): boolean {
   return hasSkill(s, t, 'kongcheng') && t.hand.length === 0;
 }
 
+// 红颜:小乔的黑桃牌视为红桃(用于判定与花色校验)
+export function effectiveSuit(s: GameState, cardId: number, ownerId?: PlayerId): string {
+  const suit = card(s, cardId).suit;
+  if (ownerId !== undefined && suit === 'spade'
+      && hasSkill(s, player(s, ownerId), 'hongyan')) {
+    return 'heart';
+  }
+  return suit;
+}
+
 // 校验 respond-card 的应答牌(含武圣/急救/龙胆/倾国转化),返回卡牌 id。只校验,不移动。
 export function validateResponseCard(
   ctx: Ctx,
