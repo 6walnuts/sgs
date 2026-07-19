@@ -1,0 +1,232 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  background: #1a2f23;
+  color: #e8e2d0;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 12px;
+  height: 100vh;
+  padding: 12px;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ---------- 座位 ---------- */
+
+.seats-top {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.seat {
+  background: #24402f;
+  border: 2px solid #3a5a45;
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.seat-active { border-color: #d8b84a; box-shadow: 0 0 8px #d8b84a55; }
+.seat-dead { opacity: 0.45; filter: grayscale(0.8); }
+.seat-targetable { cursor: pointer; border-color: #7ec8e3; }
+.seat-targetable:hover { box-shadow: 0 0 10px #7ec8e388; }
+.seat-targeted { border-color: #e35b5b; box-shadow: 0 0 10px #e35b5b88; }
+
+.seat-header { display: flex; align-items: center; gap: 8px; }
+.seat-general { font-size: 17px; font-weight: 700; }
+.seat-you {
+  background: #d8b84a; color: #1a2f23; font-size: 11px;
+  padding: 1px 6px; border-radius: 8px; font-weight: 700;
+}
+
+.role { font-size: 12px; padding: 1px 7px; border-radius: 8px; margin-left: auto; }
+.role-lord { background: #d8b84a; color: #201a05; }
+.role-loyalist { background: #d8a25b; color: #201505; }
+.role-rebel { background: #3f6ea5; color: #e9f1fa; }
+.role-spy { background: #7a5ba5; color: #f0eafa; }
+.role-hidden { background: #40584a; color: #b9c9be; }
+
+.seat-skills { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+.skill-tag {
+  font-size: 11px; color: #b9d2c2; border: 1px solid #4a6a55;
+  border-radius: 6px; padding: 0 5px;
+}
+
+.seat-hp { margin-top: 6px; font-size: 14px; letter-spacing: 2px; }
+.hp-full { color: #e35b5b; }
+.hp-empty { color: #4a5a50; }
+
+.seat-info { margin-top: 4px; font-size: 13px; color: #c2cfc4; display: flex; gap: 10px; }
+.dead-tag { color: #e35b5b; font-weight: 700; }
+.waiting-tag { color: #d8b84a; }
+
+.seat-equips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* ---------- 桌面中央 ---------- */
+
+.table-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  padding: 10px;
+  background: #20382a;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #b9c9be;
+  min-height: 56px;
+}
+
+/* ---------- 手牌与操作 ---------- */
+
+.human-area {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.human-main {
+  background: #24402f;
+  border: 2px solid #3a5a45;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hand { display: flex; flex-wrap: wrap; gap: 6px; min-height: 66px; }
+
+.card-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: #f5efdc;
+  color: #222;
+  border: 2px solid #b8ac8c;
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 58px;
+  font-size: 14px;
+  cursor: default;
+}
+
+.card-chip:disabled { cursor: default; opacity: 0.9; }
+.card-clickable { cursor: pointer; }
+.card-clickable:hover { border-color: #d8b84a; transform: translateY(-2px); }
+.card-selected { border-color: #e35b5b; transform: translateY(-4px); box-shadow: 0 3px 6px #0006; }
+.card-small { min-width: 44px; padding: 2px 5px; font-size: 11px; flex-direction: row; gap: 4px; }
+
+.suit-red { color: #c0392b; font-weight: 700; }
+.suit-black { color: #2c3e50; font-weight: 700; }
+.card-name { white-space: nowrap; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn {
+  background: #40584a;
+  color: #e8e2d0;
+  border: 1px solid #5a7a65;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: #4d6a58; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn-primary { background: #b5893a; border-color: #d8b84a; color: #fff8e0; font-weight: 700; }
+.btn-primary:hover:not(:disabled) { background: #c99a45; }
+.btn-skill { border-style: dashed; }
+.btn-skill-on { background: #6a5a2a; border-color: #d8b84a; }
+
+.hint { font-size: 13px; color: #d8b84a; }
+
+/* ---------- 日志 ---------- */
+
+.log {
+  background: #20382a;
+  border-radius: 10px;
+  padding: 10px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.log-title { font-weight: 700; color: #d8b84a; margin-bottom: 6px; }
+.log-line { color: #c9d5cb; border-bottom: 1px dashed #2e4a38; padding: 2px 0; }
+.log-turn { color: #d8b84a; margin-top: 4px; }
+
+/* ---------- 弹窗 ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #000a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.dialog {
+  background: #24402f;
+  border: 2px solid #d8b84a;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 560px;
+  width: calc(100vw - 40px);
+  box-shadow: 0 8px 30px #000a;
+}
+
+.dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.countdown { color: #e35b5b; font-variant-numeric: tabular-nums; }
+
+.dialog-body { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dialog-cards { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.dialog-candidate { position: relative; }
+.via-skill {
+  position: absolute; top: -8px; right: -4px;
+  background: #b5893a; color: #fff; font-size: 10px;
+  border-radius: 6px; padding: 0 4px;
+}
+.dialog-hint { font-size: 13px; color: #b9c9be; width: 100%; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #a33;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  z-index: 20;
+  box-shadow: 0 4px 12px #0008;
+}
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; height: auto; }
+  .log { max-height: 300px; }
+  .human-area { grid-template-columns: 1fr; }
+}
