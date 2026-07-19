@@ -3,12 +3,13 @@
 // 因此任意暂停点序列化/反序列化后都能继续结算。
 
 import type {
-  AoeFrame, CardId, ChooseGeneralsFrame, DamageFrame, DelayedFrame,
-  DrawStepFrame, DuelFrame, DyingFrame, EffectFrame, FanjianFrame,
-  GuanxingFrame, GuhuoFrame, HuogongFrame, JiedaoFrame, JudgeFrame,
-  JushouFrame, KurouFrame, LeijiFrame, LuoshenFrame, PendingRequest,
-  PindianFrame, PlayerId, QuhuFrame, ResponseData, ShensuFrame, SlashFrame,
-  TianyiFrame, TiesuoFrame, TrickFrame, WuxieFrame,
+  AoeFrame, BenghuaiFrame, CardId, ChooseGeneralsFrame, DamageFrame,
+  DelayedFrame, DrawStepFrame, DuelFrame, DyingFrame, EffectFrame,
+  FanjianFrame, GuanxingFrame, GuhuoFrame, HuogongFrame, JiedaoFrame,
+  JudgeFrame, JushouFrame, KurouFrame, LeijiFrame, LierenFrame, LuanwuFrame,
+  LuoshenFrame, PendingRequest, PindianFrame, PlayerId, QuhuFrame,
+  ResponseData, ShensuFrame, SlashFrame, TianyiFrame, TiesuoFrame, TrickFrame,
+  WuxieFrame,
 } from './types';
 import {
   EngineError, alivePlayers, ask, card, drawCards, emit, equipCardIds, fail,
@@ -99,7 +100,10 @@ const slash: FrameHandler<SlashFrame> = {
       case 'start': {
         if (!tgt.alive || !src.alive) { f.step = 'finish'; return; }
         if (f.dodgesNeeded === undefined) {
-          f.dodgesNeeded = hasSkill(s, src, 'wushuang') ? 2 : 1;
+          // 肉林:董卓对女性使用杀、女性对董卓使用杀,均需两张闪
+          const roulin = (hasSkill(s, src, 'roulin') && GENERALS[tgt.general].gender === 'f')
+            || (hasSkill(s, tgt, 'roulin') && GENERALS[src.general].gender === 'f');
+          f.dodgesNeeded = hasSkill(s, src, 'wushuang') || roulin ? 2 : 1;
           f.dodgesGot = 0;
           if (f.element === undefined) {
             f.element = f.cardId === null ? undefined : shaElement(card(s, f.cardId).name);
@@ -692,6 +696,39 @@ const damage: FrameHandler<DamageFrame> = {
             return;
           }
         }
+        // 放逐:曹丕受到伤害后,可令一名其他角色翻面并摸 X 张牌(X=已损失体力)
+        if (!f.fzAsked && hasSkill(s, tgt, 'fangzhu')
+            && alivePlayers(s).some((x) => x.id !== f.target)) {
+          f.fzAsked = true;
+          ask(ctx, { player: f.target, type: 'choose-option', options: ['fangzhu'], canDecline: true, reason: 'fangzhu' });
+          f.step = 'fangzhu-wait';
+          return;
+        }
+        // 烈刃:祝融的杀造成伤害后,可与目标拼点,赢则获得其一张牌
+        if (!f.lrAsked && f.causeKind === 'sha' && f.source !== null) {
+          const src = player(s, f.source);
+          if (hasSkill(s, src, 'lieren') && src.alive && tgt.alive
+              && src.hand.length > 0 && tgt.hand.length > 0) {
+            f.lrAsked = true;
+            ask(ctx, { player: f.source, type: 'choose-option', options: ['lieren'], canDecline: true, reason: 'lieren' });
+            f.step = 'lieren-wait';
+            return;
+          }
+          f.lrAsked = true;
+        }
+        // 暴虐:其他群势力角色造成伤害后,可判定,黑桃则主公董卓回复 1 点
+        if (!f.bnAsked && f.source !== null) {
+          const src = player(s, f.source);
+          const tyrant = alivePlayers(s).find((x) => hasSkill(s, x, 'baonve'));
+          if (tyrant && src.alive && src.id !== tyrant.id
+              && GENERALS[src.general].faction === 'qun' && tyrant.hp < tyrant.maxHp) {
+            f.bnAsked = true;
+            ask(ctx, { player: f.source, type: 'choose-option', options: ['baonve'], canDecline: true, reason: 'baonve' });
+            f.step = 'baonve-wait';
+            return;
+          }
+          f.bnAsked = true;
+        }
         // 节命:荀彧每受到 1 点伤害,可令一名角色将手牌补至体力上限
         if (hasSkill(s, tgt, 'jieming')) {
           if (f.jmTimes === undefined) f.jmTimes = f.amount;
@@ -707,6 +744,17 @@ const damage: FrameHandler<DamageFrame> = {
           }
         }
         finishDamage(ctx, f);
+        return;
+      }
+      case 'baonve-judged': {
+        const res = f.childResult;
+        f.childResult = undefined;
+        f.step = 'post';
+        if (res && f.source !== null
+            && effectiveSuit(s, res.cardId, f.source) === 'spade') {
+          const tyrant = alivePlayers(s).find((x) => hasSkill(s, x, 'baonve'));
+          if (tyrant && tyrant.hp < tyrant.maxHp) heal(ctx, tyrant.id, 1);
+        }
         return;
       }
       case 'ganglie-judged': {
@@ -818,6 +866,50 @@ const damage: FrameHandler<DamageFrame> = {
         const beneficiary = player(s, r.players[0]);
         const n = beneficiary.maxHp - beneficiary.hand.length;
         if (n > 0) drawCards(ctx, beneficiary.id, n);
+        return;
+      }
+      case 'fangzhu-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { f.step = 'post'; return; }
+        ask(ctx, {
+          player: f.target, type: 'choose-player', min: 1, max: 1,
+          candidates: alivePlayers(s).filter((x) => x.id !== f.target).map((x) => x.id),
+          canDecline: true, reason: { kind: 'fangzhu' },
+        });
+        f.step = 'fangzhu-player';
+        return;
+      }
+      case 'fangzhu-player': {
+        const r = expectDeclineOr(resp, 'players');
+        f.step = 'post';
+        if (!r) return;
+        if (r.players.length !== 1 || r.players[0] === f.target
+            || !player(s, r.players[0]).alive) {
+          fail('放逐的目标不合法');
+        }
+        emit(ctx, { type: 'skillInvoked', player: f.target, skill: 'fangzhu' });
+        const exiled = player(s, r.players[0]);
+        exiled.flipped = !exiled.flipped;
+        emit(ctx, { type: 'flipped', player: exiled.id, flipped: !!exiled.flipped });
+        const me = player(s, f.target);
+        const x = me.maxHp - me.hp;
+        if (x > 0) drawCards(ctx, exiled.id, x);
+        return;
+      }
+      case 'lieren-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        f.step = 'post';
+        if (r) {
+          pushFrame(ctx, { type: 'lieren', step: 'start', source: f.source!, target: f.target });
+        }
+        return;
+      }
+      case 'baonve-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { f.step = 'post'; return; }
+        emit(ctx, { type: 'skillInvoked', player: f.source!, skill: 'baonve' });
+        pushFrame(ctx, { type: 'judge', step: 'flip', player: f.source!, reason: 'baonve' });
+        f.step = 'baonve-judged';
         return;
       }
       case 'ganglie-wait': {
@@ -963,6 +1055,12 @@ const dying: FrameHandler<DyingFrame> = {
     }
     const askerId = f.queue[f.idx];
     const asker = player(s, askerId);
+    // 完杀:贾诩的回合内,除贾诩和濒死者外,其他角色不能使用桃
+    const active = player(s, s.turn.activePlayer);
+    if (hasSkill(s, active, 'wansha') && askerId !== active.id && askerId !== f.who) {
+      f.idx++;
+      return;
+    }
     const canJijiu = hasSkill(s, asker, 'jijiu') && s.turn.activePlayer !== askerId
       && asker.hand.some((id) => isRed(card(s, id).suit));
     const hasTao = asker.hand.some((id) => card(s, id).name === 'tao');
@@ -1054,6 +1152,16 @@ const judge: FrameHandler<JudgeFrame> = {
             moveCard(ctx, cid, { zone: 'hand', player: f.player }, 'tiandu');
           } else {
             moveCard(ctx, cid, { zone: 'discard' }, 'judge');
+          }
+          // 颂威:其他魏势力角色的黑色判定牌生效后,主公曹丕摸一张(简化为自动)
+          if (isBlack(card(s, cid).suit) && GENERALS[judged.general].faction === 'wei') {
+            const kaiser = alivePlayers(s).find(
+              (x) => x.id !== f.player && hasSkill(s, x, 'songwei'),
+            );
+            if (kaiser) {
+              emit(ctx, { type: 'skillInvoked', player: kaiser.id, skill: 'songwei' });
+              drawCards(ctx, kaiser.id, 1);
+            }
           }
           popFrame(ctx, f, { cardId: cid });
           return;
@@ -1397,6 +1505,16 @@ const drawStep: FrameHandler<DrawStepFrame> = {
       return;
     }
     if (f.step !== 'ask') fail(`draw-step 帧在 ${f.step} 步不应被 run`);
+    if (hasSkill(s, p, 'zaiqi') && p.hp < p.maxHp) {
+      ask(ctx, { player: f.player, type: 'choose-option', options: ['zaiqi'], canDecline: true, reason: 'zaiqi' });
+      f.step = 'zaiqi-wait';
+      return;
+    }
+    if (hasSkill(s, p, 'haoshi')) {
+      ask(ctx, { player: f.player, type: 'choose-option', options: ['haoshi'], canDecline: true, reason: 'haoshi' });
+      f.step = 'haoshi-wait';
+      return;
+    }
     if (hasSkill(s, p, 'shuangxiong')) {
       ask(ctx, { player: f.player, type: 'choose-option', options: ['shuangxiong'], canDecline: true, reason: 'shuangxiong' });
       f.step = 'shuangxiong-wait';
@@ -1444,6 +1562,78 @@ const drawStep: FrameHandler<DrawStepFrame> = {
           const cid = pickRandomHand(ctx, victim);
           moveCard(ctx, cid, { zone: 'hand', player: f.player }, 'tuxi');
         }
+        popFrame(ctx, f);
+        return;
+      }
+      case 'zaiqi-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { normalDraw(ctx, f.player); popFrame(ctx, f); return; }
+        emit(ctx, { type: 'skillInvoked', player: f.player, skill: 'zaiqi' });
+        const p = player(s, f.player);
+        const x = p.maxHp - p.hp;
+        for (let i = 0; i < x; i++) {
+          refillDrawPile(ctx);
+          if (s.drawPile.length === 0) break;
+          const cid = flipToProcessing(ctx);
+          emit(ctx, { type: 'cardRevealed', player: f.player, cardId: cid, reason: 'zaiqi' });
+          if (card(s, cid).suit === 'heart') {
+            moveCard(ctx, cid, { zone: 'discard' }, 'zaiqi');
+            heal(ctx, f.player, 1);
+          } else {
+            moveCard(ctx, cid, { zone: 'hand', player: f.player }, 'zaiqi');
+          }
+        }
+        popFrame(ctx, f);
+        return;
+      }
+      case 'haoshi-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) { normalDraw(ctx, f.player); popFrame(ctx, f); return; }
+        emit(ctx, { type: 'skillInvoked', player: f.player, skill: 'haoshi' });
+        normalDraw(ctx, f.player, 2); // 额外摸两张
+        const p = player(s, f.player);
+        const others = alivePlayers(s).filter((x) => x.id !== f.player);
+        if (p.hand.length <= 5 || others.length === 0) { popFrame(ctx, f); return; }
+        ask(ctx, {
+          player: f.player, type: 'choose-cards', from: 'hand',
+          min: Math.floor(p.hand.length / 2), max: Math.floor(p.hand.length / 2),
+          canDecline: false, reason: { kind: 'haoshi' },
+        });
+        f.step = 'haoshi-cards';
+        return;
+      }
+      case 'haoshi-cards': {
+        if (resp.kind !== 'cards') fail('应答类型不符合当前请求');
+        const p = player(s, f.player);
+        const need = Math.floor(p.hand.length / 2);
+        if (resp.cardIds.length !== need
+            || new Set(resp.cardIds).size !== resp.cardIds.length
+            || !resp.cardIds.every((id) => p.hand.includes(id))) {
+          fail(`好施需要交出 ${need} 张手牌`);
+        }
+        f.hsCards = resp.cardIds;
+        const others = alivePlayers(s).filter((x) => x.id !== f.player);
+        const min = Math.min(...others.map((x) => x.hand.length));
+        const cands = others.filter((x) => x.hand.length === min).map((x) => x.id);
+        if (cands.length === 1) {
+          moveCards(ctx, f.hsCards, { zone: 'hand', player: cands[0] }, 'haoshi');
+          popFrame(ctx, f);
+          return;
+        }
+        ask(ctx, {
+          player: f.player, type: 'choose-player', min: 1, max: 1,
+          candidates: cands, canDecline: false, reason: { kind: 'haoshi' },
+        });
+        f.step = 'haoshi-player';
+        return;
+      }
+      case 'haoshi-player': {
+        if (resp.kind !== 'players' || resp.players.length !== 1) fail('好施需要选择一名角色');
+        const others = alivePlayers(s).filter((x) => x.id !== f.player);
+        const min = Math.min(...others.map((x) => x.hand.length));
+        const cands = others.filter((x) => x.hand.length === min).map((x) => x.id);
+        if (!cands.includes(resp.players[0])) fail('好施只能交给手牌最少的角色');
+        moveCards(ctx, f.hsCards!, { zone: 'hand', player: resp.players[0] }, 'haoshi');
         popFrame(ctx, f);
         return;
       }
@@ -1630,6 +1820,16 @@ const aoe: FrameHandler<AoeFrame> = {
           // 五谷剩余的牌进弃牌堆
           for (const id of f.shownIds ?? []) discardIfProcessing(ctx, id);
           for (const id of f.extraCardIds ?? []) discardIfProcessing(ctx, id);
+          // 巨象:其他角色使用的南蛮入侵结算完毕后,祝融获得之
+          if (f.effName === 'nanman' && inProcessing(s, f.cardId)) {
+            const zr = alivePlayers(s).find(
+              (x) => x.id !== f.source && hasSkill(s, x, 'juxiang'),
+            );
+            if (zr) {
+              emit(ctx, { type: 'skillInvoked', player: zr.id, skill: 'juxiang' });
+              moveCard(ctx, f.cardId, { zone: 'hand', player: zr.id }, 'juxiang');
+            }
+          }
           discardIfProcessing(ctx, f.cardId);
           popFrame(ctx, f);
           return;
@@ -1647,6 +1847,16 @@ const aoe: FrameHandler<AoeFrame> = {
           emit(ctx, { type: 'skillInvoked', player: tgt.id, skill: 'tengjia' });
           f.idx++;
           return;
+        }
+        // 祸首/巨象:南蛮入侵对孟获/祝融无效;帷幕:黑色锦囊(南蛮)不能指定贾诩
+        if (f.effName === 'nanman') {
+          const immune = (['huoshou', 'juxiang', 'weimu'] as const)
+            .find((sk) => hasSkill(s, tgt, sk));
+          if (immune) {
+            emit(ctx, { type: 'skillInvoked', player: tgt.id, skill: immune });
+            f.idx++;
+            return;
+          }
         }
         pushFrame(ctx, {
           type: 'wuxie', step: 'ask', negated: false, idx: 0,
@@ -1701,13 +1911,22 @@ const aoe: FrameHandler<AoeFrame> = {
     }
   },
   onResponse(ctx, f, resp) {
+    const s = ctx.s;
     const tgtId = f.queue[f.idx];
     switch (f.step) {
       case 'card-wait': {
         const r = expectDeclineOr(resp, 'card');
         if (!r) {
+          // 祸首:其他角色使用的南蛮入侵,由孟获代替成为伤害来源
+          let dmgSource = f.source;
+          if (f.effName === 'nanman') {
+            const mh = alivePlayers(s).find(
+              (x) => x.id !== f.source && hasSkill(s, x, 'huoshou'),
+            );
+            if (mh) dmgSource = mh.id;
+          }
           pushDamage(ctx, {
-            source: f.source, target: tgtId, amount: 1, causeCardIds: [f.cardId],
+            source: dmgSource, target: tgtId, amount: 1, causeCardIds: [f.cardId],
           });
         } else {
           const pattern = f.effName === 'nanman' ? 'sha' : 'shan';
@@ -2270,6 +2489,145 @@ const tianyi: FrameHandler<TianyiFrame> = {
   },
 };
 
+// ---------- 烈刃(祝融) ----------
+
+const lieren: FrameHandler<LierenFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    switch (f.step) {
+      case 'start': {
+        emit(ctx, { type: 'skillInvoked', player: f.source, skill: 'lieren' });
+        f.step = 'pindian-done';
+        pushFrame(ctx, { type: 'pindian', step: 'start', a: f.source, b: f.target });
+        return;
+      }
+      case 'pindian-done': {
+        const won = f.childResult?.won ?? false;
+        f.childResult = undefined;
+        const tgt = player(s, f.target);
+        if (!won || !tgt.alive || totalCardCount(tgt) === 0) { popFrame(ctx, f); return; }
+        ask(ctx, {
+          player: f.source, type: 'pick-card', target: f.target,
+          handCount: tgt.hand.length, equips: equipCardIds(tgt), judges: [], reason: 'lieren',
+        });
+        f.step = 'pick-wait';
+        return;
+      }
+      default:
+        fail(`lieren 帧在 ${f.step} 步不应被 run`);
+    }
+  },
+  onResponse(ctx, f, resp) {
+    if (f.step !== 'pick-wait') fail('lieren 帧当前不接受应答');
+    const cid = resolvePick(ctx, f.target, resp);
+    moveCard(ctx, cid, { zone: 'hand', player: f.source }, 'lieren');
+    popFrame(ctx, f);
+  },
+};
+
+// ---------- 崩坏(董卓) ----------
+
+const benghuai: FrameHandler<BenghuaiFrame> = {
+  run(ctx, f) {
+    ask(ctx, {
+      player: f.player, type: 'choose-option',
+      options: ['benghuai-hp', 'benghuai-maxhp'], canDecline: false, reason: 'benghuai',
+    });
+  },
+  onResponse(ctx, f, resp) {
+    const s = ctx.s;
+    if (resp.kind !== 'option') fail('崩坏必须选择一项');
+    emit(ctx, { type: 'skillInvoked', player: f.player, skill: 'benghuai' });
+    popFrame(ctx, f);
+    const p = player(s, f.player);
+    if (resp.index === 0) {
+      loseHp(ctx, f.player, 1);
+    } else {
+      p.maxHp -= 1;
+      if (p.hp > p.maxHp) {
+        p.hp = p.maxHp;
+        emit(ctx, { type: 'hpChanged', player: f.player, hp: p.hp, delta: 0 });
+      }
+      if (p.maxHp <= 0) performDeath(ctx, f.player, null);
+    }
+  },
+};
+
+// ---------- 乱武(贾诩,限定技) ----------
+
+function luanwuNearest(ctx: Ctx, pid: PlayerId): PlayerId[] {
+  const others = alivePlayers(ctx.s).filter((x) => x.id !== pid);
+  if (others.length === 0) return [];
+  const min = Math.min(...others.map((x) => distance(ctx.s, pid, x.id)));
+  return others.filter((x) => distance(ctx.s, pid, x.id) === min).map((x) => x.id);
+}
+
+const luanwu: FrameHandler<LuanwuFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    if (f.step !== 'next') fail(`luanwu 帧在 ${f.step} 步不应被 run`);
+    while (f.idx < f.queue.length) {
+      const pid = f.queue[f.idx];
+      if (player(s, pid).alive && luanwuNearest(ctx, pid).length > 0) {
+        ask(ctx, {
+          player: pid, type: 'respond-card', pattern: 'sha', canDecline: true,
+          reason: { kind: 'luanwu', source: f.source },
+        });
+        f.step = 'sha-wait';
+        return;
+      }
+      f.idx++;
+    }
+    popFrame(ctx, f);
+  },
+  onResponse(ctx, f, resp) {
+    const pid = f.queue[f.idx];
+    switch (f.step) {
+      case 'sha-wait': {
+        const r = expectDeclineOr(resp, 'card');
+        if (!r) {
+          f.idx++;
+          f.step = 'next';
+          loseHp(ctx, pid, 1);
+          return;
+        }
+        const cid = validateResponseCard(ctx, pid, r, 'sha');
+        const nearest = luanwuNearest(ctx, pid);
+        if (nearest.length === 1) {
+          f.idx++;
+          f.step = 'next';
+          moveCard(ctx, cid, { zone: 'processing' }, 'play');
+          emit(ctx, { type: 'cardPlayed', player: pid, cardId: cid, targets: [nearest[0]] });
+          pushFrame(ctx, { type: 'slash', step: 'start', source: pid, target: nearest[0], cardId: cid });
+          return;
+        }
+        f.pendingCard = cid;
+        ask(ctx, {
+          player: pid, type: 'choose-player', min: 1, max: 1,
+          candidates: nearest, canDecline: false, reason: { kind: 'luanwu' },
+        });
+        f.step = 'target-wait';
+        return;
+      }
+      case 'target-wait': {
+        if (resp.kind !== 'players' || resp.players.length !== 1) fail('乱武需要选择一个目标');
+        const nearest = luanwuNearest(ctx, pid);
+        if (!nearest.includes(resp.players[0])) fail('乱武只能指定距离最近的角色');
+        const cid = f.pendingCard!;
+        f.pendingCard = undefined;
+        f.idx++;
+        f.step = 'next';
+        moveCard(ctx, cid, { zone: 'processing' }, 'play');
+        emit(ctx, { type: 'cardPlayed', player: pid, cardId: cid, targets: [resp.players[0]] });
+        pushFrame(ctx, { type: 'slash', step: 'start', source: pid, target: resp.players[0], cardId: cid });
+        return;
+      }
+      default:
+        fail(`luanwu 帧在 ${f.step} 步不接受应答`);
+    }
+  },
+};
+
 // ---------- 开局选将 ----------
 
 const chooseGenerals: FrameHandler<ChooseGeneralsFrame> = {
@@ -2307,5 +2665,6 @@ export const frameHandlers: Record<EffectFrame['type'], FrameHandler<any>> = {
   guanxing, luoshen, 'draw-step': drawStep, delayed, kurou, fanjian, aoe, jiedao,
   huogong, tiesuo, shensu, jushou, leiji, guhuo,
   pindian, quhu, tianyi,
+  lieren, benghuai, luanwu,
   'choose-generals': chooseGenerals,
 };

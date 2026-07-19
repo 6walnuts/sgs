@@ -55,6 +55,13 @@ const GENERALS = [
   { id: 'pangde', name: '庞德', candidates: ['Pang De Qing illustration.jpg'], search: 'Pang De illustration Romance of the Three Kingdoms' },
   { id: 'yanliangwenchou', name: '颜良文丑', candidates: ['Yan Liang Qing illustration.jpg'], search: 'Yan Liang illustration Romance of the Three Kingdoms' },
   { id: 'yuanshao', name: '袁绍', candidates: ['Yuan Shao Qing illustration.jpg'], search: 'Yuan Shao illustration Romance of the Three Kingdoms' },
+  { id: 'caopi', name: '曹丕', candidates: ['Cao Pi Tang.jpg'], search: 'Cao Pi portrait emperor' },
+  { id: 'xuhuang', name: '徐晃', candidates: ['Xu Huang Qing illustration.jpg'], search: 'Xu Huang illustration Romance of the Three Kingdoms' },
+  { id: 'menghuo', name: '孟获', candidates: ['Meng Huo Qing illustration.jpg'], search: 'Meng Huo illustration Romance of the Three Kingdoms' },
+  { id: 'zhurong', name: '祝融', candidates: [], search: 'Lady Zhurong illustration Romance of the Three Kingdoms' },
+  { id: 'lusu', name: '鲁肃', candidates: ['Lu Su Qing illustration.jpg'], search: 'Lu Su illustration Romance of the Three Kingdoms' },
+  { id: 'dongzhuo', name: '董卓', candidates: ['Dong Zhuo Qing illustration.jpg'], search: 'Dong Zhuo illustration Romance of the Three Kingdoms' },
+  { id: 'jiaxu', name: '贾诩', candidates: ['Jia Xu Qing illustration.jpg'], search: 'Jia Xu illustration Romance of the Three Kingdoms' },
 ];
 
 const PD_PATTERN = /public\s*domain|^pd\b|pd-|cc0/i;

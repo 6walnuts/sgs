@@ -59,7 +59,8 @@ export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boole
   if (!p.alive) return false;
   const def = GENERALS[p.general];
   if (!def.skills.includes(skill)) return false;
-  if ((skill === 'jiuyuan' || skill === 'xueyi') && p.role !== 'lord') return false;
+  const lordOnly: SkillName[] = ['jiuyuan', 'xueyi', 'songwei', 'baonve'];
+  if (lordOnly.includes(skill) && p.role !== 'lord') return false;
   return true;
 }
 
@@ -304,8 +305,18 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
   dead.roleRevealed = true;
   emit(ctx, { type: 'playerDied', player: pid, role: dead.role, killer });
 
-  const all = [...dead.hand, ...equipCardIds(dead), ...dead.judgeZone, ...(dead.buqu ?? [])];
-  if (all.length > 0) moveCards(ctx, all, { zone: 'discard' }, 'death');
+  // 行殇:曹丕获得死亡角色的手牌与装备(简化为自动发动),判定区仍弃置
+  const mourner = alivePlayers(s).find((x) => x.id !== pid && hasSkill(s, x, 'xingshang'));
+  const loot = [...dead.hand, ...equipCardIds(dead)];
+  const rest = [...dead.judgeZone, ...(dead.buqu ?? [])];
+  if (mourner && loot.length > 0) {
+    emit(ctx, { type: 'skillInvoked', player: mourner.id, skill: 'xingshang' });
+    moveCards(ctx, loot, { zone: 'hand', player: mourner.id }, 'xingshang');
+    if (rest.length > 0) moveCards(ctx, rest, { zone: 'discard' }, 'death');
+  } else {
+    const all = [...loot, ...rest];
+    if (all.length > 0) moveCards(ctx, all, { zone: 'discard' }, 'death');
+  }
 
   checkVictory(ctx);
   if (s.winner) return;

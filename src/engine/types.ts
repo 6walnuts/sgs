@@ -43,7 +43,10 @@ export type GeneralId =
   | 'xiaoqiao' | 'zhoutai' | 'zhangjiao' | 'yuji'
   // 火包
   | 'dianwei' | 'xunyu' | 'pangtong' | 'wolong'
-  | 'taishici' | 'pangde' | 'yanliangwenchou' | 'yuanshao';
+  | 'taishici' | 'pangde' | 'yanliangwenchou' | 'yuanshao'
+  // 林包
+  | 'caopi' | 'xuhuang' | 'menghuo' | 'zhurong'
+  | 'lusu' | 'dongzhuo' | 'jiaxu';
 
 export type SkillName =
   | 'rende' | 'wusheng' | 'jianxiong' | 'fankui' | 'guicai'
@@ -63,7 +66,11 @@ export type SkillName =
   | 'tianxiang' | 'hongyan' | 'buqu' | 'leiji' | 'guidao' | 'guhuo'
   | 'qiangxi' | 'quhu' | 'jieming' | 'lianhuan' | 'niepan'
   | 'bazhen' | 'kanpo' | 'huoji' | 'tianyi' | 'mengjin'
-  | 'shuangxiong' | 'luanji' | 'xueyi';
+  | 'shuangxiong' | 'luanji' | 'xueyi'
+  | 'xingshang' | 'fangzhu' | 'songwei' | 'duanliang'
+  | 'huoshou' | 'zaiqi' | 'juxiang' | 'lieren'
+  | 'haoshi' | 'dimeng' | 'jiuchi' | 'roulin' | 'benghuai' | 'baonve'
+  | 'wansha' | 'luanwu' | 'weimu';
 
 export interface PlayerState {
   id: PlayerId;
@@ -134,6 +141,8 @@ export interface DamageFrame {
       | 'apply' | 'post' | 'jianxiong-wait' | 'fankui-wait' | 'fankui-pick'
       | 'ganglie-wait' | 'ganglie-judged' | 'ganglie-choice' | 'ganglie-discard'
       | 'kuanggu-wait' | 'jieming-player'
+      | 'fangzhu-wait' | 'fangzhu-player' | 'lieren-wait'
+      | 'baonve-wait' | 'baonve-judged'
       | 'yiji-wait' | 'yiji-cards' | 'yiji-player';
   source: PlayerId | null;
   target: PlayerId;
@@ -151,6 +160,9 @@ export interface DamageFrame {
   txCard?: CardId;         // 天香弃置的红桃牌
   txDraw?: boolean;        // 天香转移来的伤害:结算后按已损失体力摸牌
   jmTimes?: number;        // 节命剩余触发次数(每点伤害一次)
+  fzAsked?: boolean;       // 放逐已询问
+  lrAsked?: boolean;       // 烈刃已询问
+  bnAsked?: boolean;       // 暴虐已询问
   yijiTimes?: number;      // 遗计剩余触发次数(每点伤害一次)
   yijiDrawn?: CardId[];    // 本次遗计摸到且尚未分配的牌
   yijiPicked?: CardId[];
@@ -171,7 +183,7 @@ export interface JudgeFrame {
   type: 'judge';
   step: 'flip' | 'guicai' | 'guicai-wait';
   player: PlayerId;
-  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang' | 'leiji' | 'shuangxiong';
+  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang' | 'leiji' | 'shuangxiong' | 'baonve';
   cardId?: CardId;
   queue?: Array<{ pid: PlayerId; skill: 'guicai' | 'guidao' }>;
   idx?: number;
@@ -223,8 +235,10 @@ export interface LuoshenFrame {
 export interface DrawStepFrame {
   type: 'draw-step';
   step: 'ask' | 'tuxi-wait' | 'luoyi-wait' | 'tuxi-players'
-      | 'shuangxiong-wait' | 'shuangxiong-judged';
+      | 'shuangxiong-wait' | 'shuangxiong-judged'
+      | 'zaiqi-wait' | 'haoshi-wait' | 'haoshi-cards' | 'haoshi-player';
   player: PlayerId;
+  hsCards?: CardId[]; // 好施待送出的手牌
   childResult?: { cardId: CardId };
 }
 
@@ -345,6 +359,32 @@ export interface TianyiFrame {
   childResult?: { won: boolean };
 }
 
+// 烈刃(祝融):杀造成伤害后拼点,赢则获得目标一张牌
+export interface LierenFrame {
+  type: 'lieren';
+  step: 'start' | 'pindian-done' | 'pick-wait';
+  source: PlayerId;
+  target: PlayerId;
+  childResult?: { won: boolean };
+}
+
+// 崩坏(董卓):结束阶段非最低体力时,失去 1 点体力或减 1 点体力上限
+export interface BenghuaiFrame {
+  type: 'benghuai';
+  step: 'wait';
+  player: PlayerId;
+}
+
+// 乱武(贾诩):限定技,其他角色依次对距离最近者出杀,否则失去 1 点体力
+export interface LuanwuFrame {
+  type: 'luanwu';
+  step: 'next' | 'sha-wait' | 'target-wait';
+  source: PlayerId;
+  queue: PlayerId[];
+  idx: number;
+  pendingCard?: CardId; // 已打出待选目标的杀
+}
+
 // 开局选将:主公先选,其余角色按座次依次选;全部选定后发起始手牌
 export interface ChooseGeneralsFrame {
   type: 'choose-generals';
@@ -372,6 +412,7 @@ export type EffectFrame =
   | HuogongFrame | TiesuoFrame
   | ShensuFrame | LeijiFrame | GuhuoFrame | JushouFrame
   | PindianFrame | QuhuFrame | TianyiFrame
+  | LierenFrame | BenghuaiFrame | LuanwuFrame
   | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
@@ -382,7 +423,8 @@ export interface RequestReason {
       | 'aoe' | 'jiedao' | 'wugu' | 'guanshi-discard' | 'cixiong-discard'
       | 'huogong-show' | 'huogong-match'
       | 'tianxiang' | 'shensu-equip' | 'leiji' | 'guhuo'
-      | 'pindian' | 'jieming' | 'quhu';
+      | 'pindian' | 'jieming' | 'quhu'
+      | 'fangzhu' | 'haoshi' | 'luanwu';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -398,7 +440,8 @@ export type OptionReason =
   | 'cixiong-choice' | 'guanshi' | 'qilin' | 'hanbing' | 'zhuque'
   | 'shensu1' | 'shensu2' | 'jushou' | 'liegong' | 'kuanggu'
   | 'tianxiang' | 'leiji' | 'guhuo-challenge'
-  | 'mengjin' | 'shuangxiong' | 'niepan';
+  | 'mengjin' | 'shuangxiong' | 'niepan'
+  | 'fangzhu' | 'zaiqi' | 'haoshi' | 'lieren' | 'baonve' | 'benghuai';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }
@@ -419,7 +462,7 @@ export type PendingRequest =
       cardIds: CardId[]; reason: 'guanxing' }
   | { id: number; player: PlayerId; type: 'pick-card';
       target: PlayerId; handCount: number; equips: CardId[]; judges: CardId[];
-      reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' | 'mengjin' }
+      reason: 'guohe' | 'shunshou' | 'fankui' | 'hanbing' | 'mengjin' | 'lieren' }
   | { id: number; player: PlayerId; type: 'choose-general';
       candidates: GeneralId[] };
 

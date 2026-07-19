@@ -13,7 +13,8 @@ import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from 
 type ActiveSkill =
   | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
   | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose' | 'zhangba' | 'guhuo'
-  | 'qiangxi' | 'quhu' | 'tianyi' | 'lianhuan' | 'huoji' | 'shuangxiong' | 'luanji';
+  | 'qiangxi' | 'quhu' | 'tianyi' | 'lianhuan' | 'huoji' | 'shuangxiong' | 'luanji'
+  | 'duanliang' | 'dimeng' | 'jiuchi' | 'luanwu';
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -44,6 +45,9 @@ function targetsNeeded(
       case 'kurou': return [0, 0];
       case 'lianhuan': return [0, 2]; // 0 = 重铸
       case 'luanji': return [0, 0];
+      case 'jiuchi': return [0, 0];
+      case 'luanwu': return [0, 0];
+      case 'dimeng': return [2, 2];
       default: return [1, 1];
     }
   }
@@ -71,7 +75,9 @@ function cardsNeeded(skill: ActiveSkill): [number, number] {
     case 'fanjian': return [0, 0];
     case 'quhu': return [0, 0];
     case 'tianyi': return [0, 0];
+    case 'luanwu': return [0, 0];
     case 'qiangxi': return [0, 1]; // 可选:弃一张武器牌代替失去体力
+    case 'dimeng': return [0, 99]; // 需弃两者手牌数之差的牌
     default: return [1, 1];
   }
 }
@@ -91,7 +97,7 @@ function confirmLabel(
 
 function multiSelect(skill: ActiveSkill | null): boolean {
   return skill === 'rende' || skill === 'zhiheng' || skill === 'jieyin'
-    || skill === 'zhangba' || skill === 'luanji';
+    || skill === 'zhangba' || skill === 'luanji' || skill === 'dimeng';
 }
 
 // ---------- 指向箭头:出牌/技能指定目标时,从来源座位画箭头到目标座位 ----------
@@ -267,6 +273,8 @@ export function GameBoard({
       case 'qiangxi': return !!human.flags.qiangxi;
       case 'quhu': return !!human.flags.quhu;
       case 'tianyi': return !!human.flags.tianyi;
+      case 'dimeng': return !!human.flags.dimeng;
+      case 'luanwu': return (human.usedLimit ?? []).includes('luanwu');
       case 'shuangxiong': return typeof human.flags.shuangxiong !== 'number';
       default: return false;
     }
@@ -361,7 +369,7 @@ export function GameBoard({
             selectedCards={selCards}
             onEquipClick={
               isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian'
-                || selSkill === 'guose' || selSkill === 'qiangxi')
+                || selSkill === 'guose' || selSkill === 'qiangxi' || selSkill === 'dimeng')
                 ? toggleCard
                 : undefined
             }

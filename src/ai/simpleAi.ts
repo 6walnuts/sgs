@@ -460,6 +460,15 @@ function decideOption(
     case 'shuangxiong':
       // 简化:摸两张通常优于赌一张判定牌,不发动
       return { kind: 'decline' };
+    case 'zaiqi':
+      // 已损失体力 ≥2 时,期望回血优于摸两张
+      return p.maxHp - p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    case 'haoshi':
+      // 手牌不多时白赚两张(超过5张要送出一半)
+      return p.hand.length + 2 <= 5 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    case 'benghuai':
+      // 体力充裕时掉体力,残血时掉上限
+      return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
     case 'guhuo-challenge':
       // 保守:体力充裕才质疑(猜错真牌要失去 1 点体力)
       return p.hp >= 4 ? { kind: 'option', index: 0 } : { kind: 'decline' };
@@ -573,6 +582,20 @@ function decideChoosePlayer(
       return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
     }
     case 'quhu': {
+      const t = enemies[0] ?? cands[0];
+      return { kind: 'players', players: [t.id] };
+    }
+    case 'fangzhu': {
+      // 翻面敌人(摸牌是代价);没有敌人就放弃
+      const t = enemies.find((x) => !x.flipped);
+      if (t) return { kind: 'players', players: [t.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'haoshi': {
+      const ally = cands.find((x) => !isEnemy(s, p.role, x));
+      return { kind: 'players', players: [(ally ?? cands[0]).id] };
+    }
+    case 'luanwu': {
       const t = enemies[0] ?? cands[0];
       return { kind: 'players', players: [t.id] };
     }

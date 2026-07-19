@@ -27,6 +27,8 @@ export const GENERAL_NAMES: Record<string, string> = {
   xiaoqiao: '小乔', zhoutai: '周泰', zhangjiao: '张角', yuji: '于吉',
   dianwei: '典韦', xunyu: '荀彧', pangtong: '庞统', wolong: '诸葛亮·卧龙',
   taishici: '太史慈', pangde: '庞德', yanliangwenchou: '颜良文丑', yuanshao: '袁绍',
+  caopi: '曹丕', xuhuang: '徐晃', menghuo: '孟获', zhurong: '祝融',
+  lusu: '鲁肃', dongzhuo: '董卓', jiaxu: '贾诩',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -50,6 +52,11 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   niepan: '涅槃', bazhen: '八阵', kanpo: '看破', huoji: '火计',
   tianyi: '天义', mengjin: '猛进', shuangxiong: '双雄', luanji: '乱击',
   xueyi: '血裔',
+  xingshang: '行殇', fangzhu: '放逐', songwei: '颂威', duanliang: '断粮',
+  huoshou: '祸首', zaiqi: '再起', juxiang: '巨象', lieren: '烈刃',
+  haoshi: '好施', dimeng: '缔盟', jiuchi: '酒池', roulin: '肉林',
+  benghuai: '崩坏', baonve: '暴虐', wansha: '完杀', luanwu: '乱武',
+  weimu: '帷幕',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -73,6 +80,10 @@ export const SKILL_HINTS: Record<string, string> = {
   tianyi: '与一名角色拼点:赢则本回合杀无距离限制且可多用一张,没赢则本回合不能使用杀(每回合一次)',
   shuangxiong: '发动过双雄后,本回合可将与判定牌颜色不同的手牌当决斗使用',
   luanji: '将两张相同花色的手牌当万箭齐发使用',
+  duanliang: '将一张黑色基本牌或装备牌当兵粮寸断使用(可指定距离2的角色)',
+  dimeng: '选两名其他角色,弃置两者手牌数之差的牌,令他们交换手牌(每回合一次)',
+  jiuchi: '将一张黑桃手牌当酒使用',
+  luanwu: '限定技:所有其他角色依次选择,对各自距离最近的角色使用杀,或失去1点体力',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -233,6 +244,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
             : `${label(r.source!)} 使用了万箭齐发,是否打出闪?`;
         case 'jiedao':
           return `${label(r.source!)} 借刀杀人:对 ${label(r.target!)} 使用杀,否则将武器交给对方`;
+        case 'luanwu':
+          return `${label(r.source!)} 发动了乱武:对距离最近的角色使用杀,否则失去1点体力`;
         case 'dying':
           return r.who === req.player
             ? '你处于濒死状态,是否使用桃?'
@@ -275,6 +288,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '蛊惑:选择要扣置的手牌';
         case 'pindian':
           return `拼点:与 ${label(req.reason.target!)} 各选一张手牌比点数,大者胜`;
+        case 'haoshi':
+          return '好施:选择一半手牌交给手牌最少的一名其他角色';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -309,6 +324,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'mengjin': return '是否发动【猛进】弃置目标的一张牌?';
         case 'shuangxiong': return '是否发动【双雄】放弃摸牌,改为判定并获得判定牌?(本回合可将异色手牌当决斗)';
         case 'niepan': return '是否发动【涅槃】?(限定技:弃置所有牌,复原武将牌,摸三张并回复到3点体力)';
+        case 'fangzhu': return '是否发动【放逐】令一名其他角色翻面并摸牌?';
+        case 'zaiqi': return '是否发动【再起】放弃摸牌,改为亮出已损失体力数的牌?(红桃回血,其余入手)';
+        case 'haoshi': return '是否发动【好施】额外摸两张牌?(手牌超过5张需送出一半)';
+        case 'lieren': return '是否发动【烈刃】与目标拼点?(赢则获得其一张牌)';
+        case 'baonve': return '是否发动【暴虐】判定?(黑桃则主公回复1点体力)';
+        case 'benghuai': return '崩坏:你不是体力最小的角色,失去1点体力或减1点体力上限';
       }
       return '';
     case 'choose-player':
@@ -319,6 +340,9 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'leiji': return '雷击:选择一名角色进行判定(黑桃则其受到2点雷电伤害)';
         case 'jieming': return '节命:令一名角色将手牌补至其体力上限';
         case 'quhu': return '驱虎:选择拼点对象攻击范围内的一名角色,由其对之造成1点伤害';
+        case 'fangzhu': return '放逐:令一名其他角色翻面并摸等同于你已损失体力的牌';
+        case 'haoshi': return '好施:选择获得这些牌的角色(手牌最少者)';
+        case 'luanwu': return '乱武:选择距离最近的一名角色作为杀的目标';
         default: return '请选择目标角色';
       }
     case 'arrange-cards':
@@ -367,6 +391,13 @@ export const OPTION_LABELS: Record<string, string> = {
   mengjin: '发动猛进',
   shuangxiong: '发动双雄',
   niepan: '发动涅槃',
+  fangzhu: '发动放逐',
+  zaiqi: '发动再起',
+  haoshi: '发动好施',
+  lieren: '发动烈刃',
+  baonve: '发动暴虐',
+  'benghuai-hp': '失去1点体力',
+  'benghuai-maxhp': '减1点体力上限',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',

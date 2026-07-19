@@ -42,6 +42,7 @@ describe('荀彧·驱虎/节命', () => {
     setGeneral(s, 'p0', 'xunyu');
     rigPlay(s, 'p0');
     P(s, 'p0').hp = 3;
+    P(s, 'p1').hp = 4; // 驱虎要求目标体力更高
     const mine = give(s, 'p0', 'sha', { suit: 'spade' });
     const theirs = give(s, 'p1', 'shan');
     // 保证点数大小:找一张点数更大的给自己
@@ -76,6 +77,8 @@ describe('荀彧·驱虎/节命', () => {
     setGeneral(s, 'p0', 'xunyu');
     rigPlay(s, 'p0');
     P(s, 'p0').hp = 3;
+    P(s, 'p1').hp = 4;
+    P(s, 'p1').maxHp = 4;
     const mine = give(s, 'p0', 'shan');
     const theirs = give(s, 'p1', 'sha');
     s.cards[mine].rank = 2;

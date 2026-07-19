@@ -311,10 +311,9 @@ describe('吴将', () => {
     const diamond = give(s, 'p0', 'sha', { suit: 'diamond' });
     s = act(s, { kind: 'use-skill', skill: 'guose', cardIds: [diamond], targets: ['p1'] });
     expect(P(s, 'p1').judgeZone).toContain(diamond);
-    s = act(s, { kind: 'end-phase' });
-    // p1 回合:判定阶段结算乐(判黑桃 → 跳过出牌)
+    // p1 回合:判定阶段结算乐(判黑桃 → 跳过出牌),先摆好判定牌再结束回合
     rigDrawTop(s, { suit: 'spade' });
-    // 现在应轮到 p1 判定;继续推进到 p1 的弃牌/下家
+    s = act(s, { kind: 'end-phase' });
     // p1 出牌阶段被跳过:pendingRequest 不应是 p1 的 play
     if (s.pendingRequest?.type === 'play') {
       expect(s.pendingRequest.player).not.toBe('p1');

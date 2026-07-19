@@ -5,8 +5,9 @@ import type {
   CardName, DamageElement, PendingRequest, Phase, PlayerId, PlayerState, ResponseData,
 } from './types';
 import {
-  ask, card, drawCards, emit, equipCardIds, fail, flipToProcessing, hasSkill,
-  heal, loseHp, markShaUsage, moveCard, moveCards, orderFrom, player, pushFrame,
+  alivePlayers, ask, card, drawCards, emit, equipCardIds, fail, flipToProcessing,
+  hasSkill, heal, loseHp, markShaUsage, moveCard, moveCards, orderFrom, player,
+  pushFrame,
 } from './kernel';
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed, shaElement } from './deck';
@@ -94,7 +95,8 @@ export function flowRun(ctx: Ctx): void {
             reason: p.flags.skipJudge ? 'shensu' : 'bingliang',
           });
         } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')
-            || hasSkill(s, p, 'shuangxiong')) {
+            || hasSkill(s, p, 'shuangxiong') || hasSkill(s, p, 'haoshi')
+            || (hasSkill(s, p, 'zaiqi') && p.hp < p.maxHp)) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
           let n = 2;
@@ -147,6 +149,12 @@ export function flowRun(ctx: Ctx): void {
         p.flags._end = true;
         if (hasSkill(s, p, 'jushou')) {
           pushFrame(ctx, { type: 'jushou', step: 'wait', player: p.id });
+          return;
+        }
+        // 崩坏:结束阶段,若董卓不是体力值最小的角色
+        if (hasSkill(s, p, 'benghuai')
+            && alivePlayers(s).some((x) => x.id !== p.id && x.hp < p.hp)) {
+          pushFrame(ctx, { type: 'benghuai', step: 'wait', player: p.id });
           return;
         }
       }
@@ -208,6 +216,13 @@ function requireTarget(ctx: Ctx, p: PlayerState, targets: PlayerId[], allowSelf 
   if (!t.alive) fail('目标已死亡');
   if (!allowSelf && t.id === p.id) fail('不能以自己为目标');
   return t;
+}
+
+// 帷幕:贾诩不能成为黑色锦囊牌的目标
+function assertNotWeimu(ctx: Ctx, cardId: number, t: PlayerState): void {
+  if (isBlack(card(ctx.s, cardId).suit) && hasSkill(ctx.s, t, 'weimu')) {
+    fail('帷幕:该角色不能成为黑色锦囊牌的目标');
+  }
 }
 
 // 集智:使用非延时锦囊时摸一张
@@ -274,7 +289,9 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
         fail('铁索连环至多指定两名角色');
       }
       for (const pid of targets) {
-        if (!player(s, pid).alive) fail('目标已死亡');
+        const t = player(s, pid);
+        if (!t.alive) fail('目标已死亡');
+        assertNotWeimu(ctx, cardId, t);
       }
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets });
@@ -286,8 +303,11 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     }
     case 'bingliang': {
       const t = requireTarget(ctx, p, targets);
-      if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > 1) {
-        fail('兵粮寸断只能指定距离 1 以内的目标');
+      assertNotWeimu(ctx, cardId, t);
+      // 断粮:徐晃可对距离 2 的角色使用兵粮寸断
+      const maxDist = hasSkill(s, p, 'duanliang') ? 2 : 1;
+      if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > maxDist) {
+        fail(`兵粮寸断只能指定距离 ${maxDist} 以内的目标`);
       }
       if (t.judgeZone.some((id) => card(s, id).name === 'bingliang')) {
         fail('目标的判定区已有兵粮寸断');
@@ -318,6 +338,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     }
     case 'guohe': {
       const t = requireTarget(ctx, p, targets);
+      assertNotWeimu(ctx, cardId, t);
       if (stealableCount(t) === 0) fail('目标没有牌可拆');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
@@ -327,6 +348,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     }
     case 'shunshou': {
       const t = requireTarget(ctx, p, targets);
+      assertNotWeimu(ctx, cardId, t);
       if (hasSkill(s, t, 'qianxun')) fail('谦逊:该角色不能成为顺手牵羊的目标');
       if (stealableCount(t) === 0) fail('目标没有牌可拿');
       if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > 1) {
@@ -340,6 +362,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     }
     case 'juedou': {
       const t = requireTarget(ctx, p, targets);
+      assertNotWeimu(ctx, cardId, t);
       if (kongchengProtected(s, t)) fail('空城:该角色不能成为决斗的目标');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
@@ -404,6 +427,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       const b = player(s, targets[1]);
       if (!a.alive || !b.alive) fail('目标已死亡');
       if (a.id === p.id) fail('不能以自己为借刀目标');
+      assertNotWeimu(ctx, cardId, a);
       if (a.equips.weapon === undefined) fail('目标没有装备武器');
       if (kongchengProtected(s, b)) fail('空城:该角色不能成为杀的目标');
       if (distance(s, a.id, b.id) > attackRange(s, a)) fail('杀的目标须在持武器者的攻击范围内');
@@ -422,6 +446,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
 
 function placeLebusishu(ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState): void {
   const s = ctx.s;
+  assertNotWeimu(ctx, cardId, t);
   if (hasSkill(s, t, 'qianxun')) fail('谦逊:该角色不能成为乐不思蜀的目标');
   if (t.judgeZone.some((id) => card(s, id).name === 'lebusishu')) {
     fail('目标的判定区已有乐不思蜀');
@@ -730,6 +755,62 @@ function useSkill(
         type: 'aoe', step: 'next', effName: 'wanjian', cardId: cardIds[0],
         extraCardIds: [cardIds[1]], source: p.id, queue, idx: 0,
       });
+      return;
+    }
+    case 'duanliang': {
+      if (!hasSkill(s, p, 'duanliang')) fail('你没有断粮技能');
+      if (cardIds.length !== 1) fail('断粮需要选择一张黑色基本牌或装备牌');
+      assertInHand(s, p, cardIds[0]);
+      const c = card(s, cardIds[0]);
+      if (!isBlack(c.suit)) fail('断粮需要黑色牌');
+      const basic = ['sha', 'huosha', 'leisha', 'shan', 'tao', 'jiu'].includes(c.name);
+      if (!basic && equipSlotOf(c.name) === null) fail('断粮需要基本牌或装备牌');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'duanliang' });
+      playAs(ctx, p, cardIds[0], 'bingliang', targets);
+      return;
+    }
+    case 'dimeng': {
+      if (!hasSkill(s, p, 'dimeng')) fail('你没有缔盟技能');
+      if (p.flags.dimeng) fail('缔盟每回合限一次');
+      if (targets.length !== 2 || targets[0] === targets[1]) fail('缔盟需要选择两名其他角色');
+      const [a, b] = targets.map((id) => player(s, id));
+      for (const t of [a, b]) {
+        if (!t.alive) fail('目标已死亡');
+        if (t.id === p.id) fail('缔盟不能以自己为目标');
+      }
+      const diff = Math.abs(a.hand.length - b.hand.length);
+      if (cardIds.length !== diff) fail(`缔盟需要弃置 ${diff} 张牌(两者手牌数之差)`);
+      if (new Set(cardIds).size !== cardIds.length) fail('不能重复选择同一张牌');
+      for (const id of cardIds) {
+        if (!p.hand.includes(id) && !equipCardIds(p).includes(id)) fail('所选牌不属于你');
+      }
+      p.flags.dimeng = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'dimeng' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [a.id, b.id] });
+      if (cardIds.length > 0) moveCards(ctx, cardIds, { zone: 'discard' }, 'dimeng');
+      const aHand = [...a.hand];
+      const bHand = [...b.hand];
+      if (aHand.length > 0) moveCards(ctx, aHand, { zone: 'hand', player: b.id }, 'dimeng');
+      if (bHand.length > 0) moveCards(ctx, bHand, { zone: 'hand', player: a.id }, 'dimeng');
+      return;
+    }
+    case 'jiuchi': {
+      if (!hasSkill(s, p, 'jiuchi')) fail('你没有酒池技能');
+      if (cardIds.length !== 1) fail('酒池需要选择一张黑桃手牌');
+      assertInHand(s, p, cardIds[0]);
+      if (card(s, cardIds[0]).suit !== 'spade') fail('酒池需要黑桃牌');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jiuchi' });
+      playAs(ctx, p, cardIds[0], 'jiu', targets);
+      return;
+    }
+    case 'luanwu': {
+      if (!hasSkill(s, p, 'luanwu')) fail('你没有乱武技能');
+      if ((p.usedLimit ?? []).includes('luanwu')) fail('乱武是限定技,已发动过');
+      p.usedLimit = [...(p.usedLimit ?? []), 'luanwu'];
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'luanwu' });
+      const queue = orderFrom(s).filter((pid) => pid !== p.id);
+      emit(ctx, { type: 'targeted', source: p.id, targets: queue });
+      pushFrame(ctx, { type: 'luanwu', step: 'next', source: p.id, queue, idx: 0 });
       return;
     }
     case 'guhuo': {
