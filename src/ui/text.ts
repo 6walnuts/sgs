@@ -5,7 +5,7 @@ import type {
 export const CARD_NAMES: Record<CardName, string> = {
   sha: '杀', shan: '闪', tao: '桃',
   guohe: '过河拆桥', shunshou: '顺手牵羊', wuzhong: '无中生有',
-  juedou: '决斗', wuxie: '无懈可击',
+  juedou: '决斗', wuxie: '无懈可击', lebusishu: '乐不思蜀',
   zhugeliannu: '诸葛连弩', qinglongdao: '青龙偃月刀', baguazhen: '八卦阵',
   jiama: '+1马', jianma: '-1马',
 };
@@ -13,6 +13,10 @@ export const CARD_NAMES: Record<CardName, string> = {
 export const GENERAL_NAMES: Record<string, string> = {
   liubei: '刘备', guanyu: '关羽', caocao: '曹操', simayi: '司马懿',
   sunquan: '孙权', ganning: '甘宁', diaochan: '貂蝉', huatuo: '华佗',
+  xiahoudun: '夏侯惇', zhangliao: '张辽', xuchu: '许褚', guojia: '郭嘉', zhenji: '甄姬',
+  zhangfei: '张飞', zhugeliang: '诸葛亮', zhaoyun: '赵云', machao: '马超', huangyueying: '黄月英',
+  lvmeng: '吕蒙', huanggai: '黄盖', zhouyu: '周瑜', daqiao: '大乔', luxun: '陆逊',
+  sunshangxiang: '孙尚香', lvbu: '吕布',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -20,6 +24,12 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   guicai: '鬼才', zhiheng: '制衡', jiuyuan: '救援', qixi: '奇袭',
   lijian: '离间', biyue: '闭月', jijiu: '急救', qingnang: '青囊',
   bagua: '八卦阵', qinglong: '青龙偃月刀',
+  ganglie: '刚烈', tuxi: '突袭', luoyi: '裸衣', tiandu: '天妒', yiji: '遗计',
+  luoshen: '洛神', qingguo: '倾国', paoxiao: '咆哮', guanxing: '观星',
+  kongcheng: '空城', longdan: '龙胆', mashu: '马术', tieji: '铁骑',
+  jizhi: '集智', qicai: '奇才', keji: '克己', kurou: '苦肉', yingzi: '英姿',
+  fanjian: '反间', guose: '国色', liuli: '流离', qianxun: '谦逊',
+  lianying: '连营', jieyin: '结姻', xiaoji: '枭姬', wushuang: '无双',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -29,6 +39,11 @@ export const SKILL_HINTS: Record<string, string> = {
   qixi: '选一张黑色牌当过河拆桥使用',
   lijian: '弃一张牌,令两名男性角色决斗(先选的一方为发起者)',
   qingnang: '弃一张手牌,令一名已受伤角色回复1点体力(每回合一次)',
+  longdan: '选一张闪当杀使用(响应时也可杀闪互换)',
+  kurou: '失去1点体力,然后摸两张牌',
+  jieyin: '弃两张手牌,令一名已受伤的男性角色与你各回复1点体力(每回合一次)',
+  fanjian: '令一名角色猜花色并随机获得你一张手牌,猜错则受到1点伤害(每回合一次)',
+  guose: '将一张方块牌当乐不思蜀使用',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -120,6 +135,12 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
       const killer = ev.killer ? `被 ${label(ev.killer)} 杀死,` : '';
       return `${label(ev.player)}(${ROLE_NAMES[ev.role]})${killer}阵亡`;
     }
+    case 'phaseSkipped':
+      return ev.reason === 'lebusishu'
+        ? `${label(ev.player)} 被乐不思蜀跳过了出牌阶段`
+        : `${label(ev.player)} 跳过了${ev.phase === 'discard' ? '弃牌' : '出牌'}阶段`;
+    case 'cardRevealed':
+      return `${label(ev.player)} 展示了 ${cardLabel(s, ev.cardId)}`;
     case 'gameOver':
       return `游戏结束!${ev.winner.map((r) => ROLE_NAMES[r]).join('、')} 阵营获胜`;
   }
@@ -152,16 +173,44 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
       }
     }
     case 'choose-cards':
-      return req.reason.kind === 'guicai'
-        ? `是否发动【鬼才】打出一张手牌替换 ${label(req.reason.who!)} 的判定牌?`
-        : `请弃置 ${req.min} 张手牌`;
+      switch (req.reason.kind) {
+        case 'guicai':
+          return `是否发动【鬼才】打出一张手牌替换 ${label(req.reason.who!)} 的判定牌?`;
+        case 'liuli':
+          return '流离:弃置一张牌以转移这张杀';
+        case 'ganglie-discard':
+          return '刚烈:请弃置两张手牌';
+        case 'yiji':
+          return '遗计:选择要分给其他角色的牌(不选则全部保留)';
+        default:
+          return `请弃置 ${req.min} 张手牌`;
+      }
     case 'choose-option':
       switch (req.reason) {
         case 'bagua': return '是否发动【八卦阵】进行判定?(红色视为闪)';
         case 'jianxiong': return '是否发动【奸雄】获得造成伤害的牌?';
         case 'fankui': return '是否发动【反馈】获得伤害来源的一张牌?';
+        case 'liuli': return '是否发动【流离】把这张杀转移给别人?';
+        case 'tieji': return '是否发动【铁骑】进行判定?(红色则目标不能闪)';
+        case 'ganglie': return '是否发动【刚烈】进行判定?';
+        case 'ganglie-choice': return '刚烈生效:弃两张手牌,或受到1点伤害';
+        case 'yiji': return '是否发动【遗计】摸两张牌?';
+        case 'luoshen': return '是否发动【洛神】判定?(黑色则获得判定牌并可继续)';
+        case 'guanxing': return '是否发动【观星】查看并调整牌堆顶的牌?';
+        case 'tuxi': return '是否发动【突袭】放弃摸牌,改为获得至多两名角色各一张手牌?';
+        case 'luoyi': return '是否发动【裸衣】少摸一张牌,本回合杀/决斗伤害+1?';
+        case 'fanjian-suit': return '反间:猜一种花色(猜错将受到1点伤害)';
       }
       return '';
+    case 'choose-player':
+      switch (req.reason.kind) {
+        case 'tuxi': return `突袭:选择至多 ${req.max} 名角色,各获得其一张手牌`;
+        case 'liuli': return '流离:选择杀的新目标(须在你的攻击范围内)';
+        case 'yiji': return '遗计:选择获得这些牌的角色';
+        default: return '请选择目标角色';
+      }
+    case 'arrange-cards':
+      return '观星:调整牌堆顶的牌(上方为牌堆顶,按顺序摸取;移到下方则放到牌堆底)';
     case 'pick-card': {
       const what = req.reason === 'guohe' ? '弃置' : '获得';
       return `选择要${what}的 ${label(req.target)} 的一张牌`;
@@ -173,4 +222,18 @@ export const OPTION_LABELS: Record<string, string> = {
   bagua: '发动八卦阵',
   jianxiong: '发动奸雄',
   fankui: '发动反馈',
+  liuli: '发动流离',
+  tieji: '发动铁骑',
+  ganglie: '发动刚烈',
+  'ganglie-discard': '弃两张手牌',
+  'ganglie-damage': '受到1点伤害',
+  yiji: '发动遗计',
+  luoshen: '发动洛神',
+  guanxing: '发动观星',
+  tuxi: '发动突袭',
+  luoyi: '发动裸衣',
+  spade: '♠ 黑桃',
+  heart: '♥ 红桃',
+  club: '♣ 梅花',
+  diamond: '♦ 方块',
 };

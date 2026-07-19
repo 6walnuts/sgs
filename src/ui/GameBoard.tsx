@@ -10,23 +10,38 @@ import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
 import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES } from './text';
 
-type ActiveSkill = 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang';
+type ActiveSkill =
+  | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
+  | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose';
 
 function targetsNeeded(state: GameState, skill: ActiveSkill | null, cardIds: number[]): number {
   if (skill) {
     switch (skill) {
       case 'lijian': return 2;
       case 'zhiheng': return 0;
+      case 'kurou': return 0;
       default: return 1;
     }
   }
   if (cardIds.length !== 1) return 0;
   const name = state.cards[cardIds[0]].name;
-  return ['sha', 'guohe', 'shunshou', 'juedou'].includes(name) ? 1 : 0;
+  return ['sha', 'guohe', 'shunshou', 'juedou', 'lebusishu'].includes(name) ? 1 : 0;
+}
+
+// 技能需要选择的牌数:[最少, 最多]
+function cardsNeeded(skill: ActiveSkill): [number, number] {
+  switch (skill) {
+    case 'rende': return [1, 99];
+    case 'zhiheng': return [1, 99];
+    case 'jieyin': return [2, 2];
+    case 'kurou': return [0, 0];
+    case 'fanjian': return [0, 0];
+    default: return [1, 1];
+  }
 }
 
 function multiSelect(skill: ActiveSkill | null): boolean {
-  return skill === 'rende' || skill === 'zhiheng';
+  return skill === 'rende' || skill === 'zhiheng' || skill === 'jieyin';
 }
 
 export function GameBoard({
@@ -87,7 +102,9 @@ export function GameBoard({
   };
 
   const canConfirm = isMyPlay
-    && (selSkill ? selCards.length > 0 : selCards.length === 1)
+    && (selSkill
+      ? selCards.length >= cardsNeeded(selSkill)[0] && selCards.length <= cardsNeeded(selSkill)[1]
+      : selCards.length === 1)
     && selTargets.length === needed;
 
   const activeSkills = (GENERALS[human.general].activeSkills as ActiveSkill[]);
@@ -96,6 +113,8 @@ export function GameBoard({
       case 'zhiheng': return !!human.flags.zhiheng;
       case 'qingnang': return !!human.flags.qingnang;
       case 'lijian': return !!human.flags.lijian;
+      case 'jieyin': return !!human.flags.jieyin;
+      case 'fanjian': return !!human.flags.fanjian;
       default: return false;
     }
   };
@@ -143,7 +162,7 @@ export function GameBoard({
             targeted={selTargets.includes(humanId)}
             selectedCards={selCards}
             onEquipClick={
-              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian')
+              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian' || selSkill === 'guose')
                 ? toggleCard
                 : undefined
             }

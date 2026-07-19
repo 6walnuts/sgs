@@ -7,7 +7,7 @@ import type {
 } from '../engine/types';
 import { isBlack, isRed } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
-import { attackRange, distance, shaLimit, shaUsed } from '../engine/rules';
+import { attackRange, distance, kongchengProtected, shaLimit, shaUsed } from '../engine/rules';
 
 function card(s: GameState, id: CardId) {
   return s.cards[id];
@@ -56,6 +56,7 @@ function keepScore(s: GameState, me: PlayerState, id: CardId): number {
     case 'wuzhong': return 60;
     case 'shunshou': return 50;
     case 'guohe': return 45;
+    case 'lebusishu': return 42;
     case 'juedou': return 40;
     case 'sha': return 35;
     default: {
@@ -76,13 +77,19 @@ function junkCards(s: GameState, me: PlayerState): CardId[] {
   return me.hand.filter((id) => keepScore(s, me, id) <= 35).slice(0, 4);
 }
 
+function stealableCount(p: PlayerState): number {
+  return cardCount(p) + p.judgeZone.length;
+}
+
 export function decide(s: GameState, me: PlayerId, req: PendingRequest): ResponseData {
   const p = player(s, me);
   switch (req.type) {
     case 'play': return decidePlay(s, p);
     case 'respond-card': return decideRespondCard(s, p, req);
-    case 'choose-option': return decideOption(req);
+    case 'choose-option': return decideOption(s, p, req);
     case 'choose-cards': return decideChooseCards(s, p, req);
+    case 'choose-player': return decideChoosePlayer(s, p, req);
+    case 'arrange-cards': return { kind: 'arrange', top: [...req.cardIds], bottom: [] };
     case 'pick-card': return decidePick(s, req);
   }
 }
@@ -116,30 +123,54 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     if (junk.length > 0) return { kind: 'use-skill', skill: 'zhiheng', cardIds: junk };
   }
 
-  // 5. 顺手牵羊近距离敌人
+  // 5. 苦肉:体力充裕时换牌
+  if (hasGeneralSkill(p, 'kurou') && p.hp >= 3) {
+    return { kind: 'use-skill', skill: 'kurou' };
+  }
+
+  // 6. 乐不思蜀 / 国色
+  const le = handOf(s, p, 'lebusishu');
+  const leTarget = enemies.find(
+    (e) => !hasGeneralSkill(e, 'qianxun')
+      && !e.judgeZone.some((id) => card(s, id).name === 'lebusishu'),
+  );
+  if (le.length > 0 && leTarget) {
+    return { kind: 'play-card', cardId: le[0], targets: [leTarget.id] };
+  }
+  if (hasGeneralSkill(p, 'guose') && leTarget) {
+    const diamond = p.hand.find((id) => card(s, id).suit === 'diamond' && keepScore(s, p, id) <= 45);
+    if (diamond !== undefined) {
+      return { kind: 'use-skill', skill: 'guose', cardIds: [diamond], targets: [leTarget.id] };
+    }
+  }
+
+  // 7. 顺手牵羊近距离敌人
   const ss = handOf(s, p, 'shunshou');
   if (ss.length > 0) {
-    const t = enemies.find((e) => distance(s, p.id, e.id) <= 1 && cardCount(e) > 0);
+    const canReach = (e: PlayerState) =>
+      (hasGeneralSkill(p, 'qicai') || distance(s, p.id, e.id) <= 1)
+      && !hasGeneralSkill(e, 'qianxun') && stealableCount(e) > 0;
+    const t = enemies.find(canReach);
     if (t) return { kind: 'play-card', cardId: ss[0], targets: [t.id] };
   }
 
-  // 6. 过河拆桥(优先拆有装备的敌人)
+  // 8. 过河拆桥(优先拆有装备的敌人)
   const gh = handOf(s, p, 'guohe');
   if (gh.length > 0) {
-    const t = enemies.find((e) => equipCount(e) > 0) ?? enemies.find((e) => cardCount(e) > 0);
+    const t = enemies.find((e) => equipCount(e) > 0) ?? enemies.find((e) => stealableCount(e) > 0);
     if (t) return { kind: 'play-card', cardId: gh[0], targets: [t.id] };
   }
 
-  // 7. 奇袭:黑牌当过拆
+  // 9. 奇袭:黑牌当过拆
   if (hasGeneralSkill(p, 'qixi')) {
     const black = p.hand.find((id) => isBlack(card(s, id).suit) && keepScore(s, p, id) <= 35);
-    const t = enemies.find((e) => cardCount(e) > 0);
+    const t = enemies.find((e) => stealableCount(e) > 0);
     if (black !== undefined && t) {
       return { kind: 'use-skill', skill: 'qixi', cardIds: [black], targets: [t.id] };
     }
   }
 
-  // 8. 青囊救最残的友方(含自己)
+  // 10. 青囊救最残的友方(含自己)
   if (hasGeneralSkill(p, 'qingnang') && !p.flags.qingnang && p.hand.length > 0) {
     const hurt = [...allies, p].filter((x) => x.hp < x.maxHp).sort((a, b) => a.hp - b.hp)[0];
     if (hurt) {
@@ -148,16 +179,31 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     }
   }
 
-  // 9. 离间两个男性敌人
+  // 11. 结姻:救受伤的男性队友
+  if (hasGeneralSkill(p, 'jieyin') && !p.flags.jieyin && p.hand.length >= 4) {
+    const t = allies.find((x) => GENERALS[x.general].gender === 'm' && x.hp < x.maxHp);
+    if (t) {
+      const worst = sortByScoreAsc(s, p, p.hand).slice(0, 2);
+      return { kind: 'use-skill', skill: 'jieyin', cardIds: worst, targets: [t.id] };
+    }
+  }
+
+  // 12. 反间:打敌人手牌与体力
+  if (hasGeneralSkill(p, 'fanjian') && !p.flags.fanjian && p.hand.length > 1 && enemies.length > 0) {
+    const t = enemies.sort((a, b) => a.hp - b.hp)[0];
+    return { kind: 'use-skill', skill: 'fanjian', targets: [t.id] };
+  }
+
+  // 13. 离间两个男性敌人
   if (hasGeneralSkill(p, 'lijian') && !p.flags.lijian && p.hand.length > 1) {
     const males = enemies.filter((e) => GENERALS[e.general].gender === 'm');
-    if (males.length >= 2) {
+    if (males.length >= 2 && !kongchengProtected(s, males[1])) {
       const worst = sortByScoreAsc(s, p, p.hand)[0];
       return { kind: 'use-skill', skill: 'lijian', cardIds: [worst], targets: [males[0].id, males[1].id] };
     }
   }
 
-  // 10. 仁德:受伤时送废牌换回复
+  // 14. 仁德:受伤时送废牌换回复
   if (hasGeneralSkill(p, 'rende') && p.hp < p.maxHp && allies.length > 0) {
     const given = typeof p.flags.rende === 'number' ? p.flags.rende : 0;
     if (given < 2) {
@@ -169,10 +215,10 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     }
   }
 
-  // 11. 杀(含武圣)
+  // 15. 杀(含武圣/龙胆)
   if (shaUsed(p) < shaLimit(s, p)) {
     const inRange = enemies
-      .filter((e) => distance(s, p.id, e.id) <= attackRange(s, p))
+      .filter((e) => distance(s, p.id, e.id) <= attackRange(s, p) && !kongchengProtected(s, e))
       .sort((a, b) => a.hp - b.hp);
     if (inRange.length > 0) {
       const sha = handOf(s, p, 'sha');
@@ -185,14 +231,23 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
           return { kind: 'use-skill', skill: 'wusheng', cardIds: [red], targets: [inRange[0].id] };
         }
       }
+      if (hasGeneralSkill(p, 'longdan')) {
+        const shan = handOf(s, p, 'shan');
+        if (shan.length > 1) {
+          return { kind: 'use-skill', skill: 'longdan', cardIds: [shan[0]], targets: [inRange[0].id] };
+        }
+      }
     }
   }
 
-  // 12. 决斗:手里杀多时找敌人单挑
+  // 16. 决斗:手里杀多时找敌人单挑
   const jd = handOf(s, p, 'juedou');
   if (jd.length > 0 && handOf(s, p, 'sha').length >= 2 && enemies.length > 0) {
-    const t = enemies.sort((a, b) => a.hand.length - b.hand.length)[0];
-    return { kind: 'play-card', cardId: jd[0], targets: [t.id] };
+    const cands = enemies.filter((e) => !kongchengProtected(s, e));
+    if (cands.length > 0) {
+      const t = cands.sort((a, b) => a.hand.length - b.hand.length)[0];
+      return { kind: 'play-card', cardId: jd[0], targets: [t.id] };
+    }
   }
 
   return { kind: 'end-phase' };
@@ -205,6 +260,14 @@ function decideRespondCard(
     case 'shan': {
       const shan = handOf(s, p, 'shan');
       if (shan.length > 0) return { kind: 'card', cardId: shan[0] };
+      if (hasGeneralSkill(p, 'longdan')) {
+        const sha = handOf(s, p, 'sha');
+        if (sha.length > 0) return { kind: 'card', cardId: sha[0], skill: 'longdan' };
+      }
+      if (hasGeneralSkill(p, 'qingguo')) {
+        const black = p.hand.find((id) => isBlack(card(s, id).suit));
+        if (black !== undefined) return { kind: 'card', cardId: black, skill: 'qingguo' };
+      }
       return { kind: 'decline' };
     }
     case 'sha': {
@@ -218,6 +281,10 @@ function decideRespondCard(
       if (hasGeneralSkill(p, 'wusheng')) {
         const red = p.hand.find((id) => isRed(card(s, id).suit));
         if (red !== undefined) return { kind: 'card', cardId: red, skill: 'wusheng' };
+      }
+      if (hasGeneralSkill(p, 'longdan')) {
+        const shan = handOf(s, p, 'shan');
+        if (shan.length > 1) return { kind: 'card', cardId: shan[0], skill: 'longdan' };
       }
       return { kind: 'decline' };
     }
@@ -255,25 +322,88 @@ function decideRespondCard(
   }
 }
 
-function decideOption(_req: Extract<PendingRequest, { type: 'choose-option' }>): ResponseData {
-  // 八卦阵 / 奸雄 / 反馈:总是发动
-  return { kind: 'option', index: 0 };
+function decideOption(
+  s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'choose-option' }>,
+): ResponseData {
+  switch (req.reason) {
+    case 'ganglie-choice': {
+      // 弃两张手牌还是受 1 点伤害
+      if (p.hp <= 1 && p.hand.length >= 2) return { kind: 'option', index: 0 };
+      if (p.hand.length >= 4) return { kind: 'option', index: 0 };
+      return { kind: 'option', index: 1 };
+    }
+    case 'fanjian-suit':
+      return { kind: 'option', index: Math.floor(Math.random() * req.options.length) };
+    case 'luoyi': {
+      const shaCount = handOf(s, p, 'sha').length;
+      return shaCount >= 2 && p.hp >= 3 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    }
+    case 'tuxi':
+      return { kind: 'option', index: 0 };
+    case 'ganglie': {
+      // 只对敌人发动(伤害来源在栈里,简化:总是发动)
+      return { kind: 'option', index: 0 };
+    }
+    default:
+      // 八卦阵 / 奸雄 / 反馈 / 铁骑 / 遗计 / 洛神 / 观星 / 流离:总是发动
+      return { kind: 'option', index: 0 };
+  }
 }
 
 function decideChooseCards(
   s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'choose-cards' }>,
 ): ResponseData {
-  if (req.reason.kind === 'guicai') {
-    // v1 简化:鬼才不改判
-    return { kind: 'decline' };
+  switch (req.reason.kind) {
+    case 'guicai':
+      // v1 简化:鬼才不改判
+      return { kind: 'decline' };
+    case 'yiji':
+      // v1 简化:遗计摸到的牌自己留着
+      return { kind: 'decline' };
+    case 'liuli': {
+      const worst = sortByScoreAsc(s, p, p.hand)[0];
+      if (worst !== undefined) return { kind: 'cards', cardIds: [worst] };
+      return { kind: 'decline' };
+    }
+    default: {
+      const sorted = sortByScoreAsc(s, p, p.hand);
+      return { kind: 'cards', cardIds: sorted.slice(0, req.min) };
+    }
   }
-  const sorted = sortByScoreAsc(s, p, p.hand);
-  return { kind: 'cards', cardIds: sorted.slice(0, req.min) };
+}
+
+function decideChoosePlayer(
+  s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'choose-player' }>,
+): ResponseData {
+  const cands = req.candidates.map((id) => player(s, id));
+  const enemies = cands.filter((x) => isEnemy(s, p.role, x));
+  switch (req.reason.kind) {
+    case 'tuxi': {
+      const pick = [...enemies, ...cands.filter((x) => !enemies.includes(x))]
+        .sort((a, b) => b.hand.length - a.hand.length)
+        .slice(0, Math.min(2, req.max))
+        .map((x) => x.id);
+      return { kind: 'players', players: pick.slice(0, Math.max(req.min, Math.min(2, pick.length))) };
+    }
+    case 'liuli': {
+      const t = enemies[0] ?? cands[0];
+      if (!t) return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+      return { kind: 'players', players: [t.id] };
+    }
+    default: {
+      if (req.canDecline) return { kind: 'decline' };
+      return { kind: 'players', players: req.candidates.slice(0, req.min) };
+    }
+  }
 }
 
 function decidePick(
   s: GameState, req: Extract<PendingRequest, { type: 'pick-card' }>,
 ): ResponseData {
+  // 优先拿走判定区的乐不思蜀(拆自己人)/ 敌人的关键装备
+  if (req.judges.length > 0) {
+    return { kind: 'pick', zone: 'judge', cardId: req.judges[0] };
+  }
   if (req.equips.length > 0) {
     const best = req.equips.slice().sort((a, b) => equipPriority(s, b) - equipPriority(s, a))[0];
     return { kind: 'pick', zone: 'equip', cardId: best };
@@ -319,9 +449,17 @@ export function defaultResponse(s: GameState, req: PendingRequest): ResponseData
       const p = s.players.find((x) => x.id === req.player)!;
       return { kind: 'cards', cardIds: p.hand.slice(0, req.min) };
     }
+    case 'choose-player':
+      return req.canDecline
+        ? { kind: 'decline' }
+        : { kind: 'players', players: req.candidates.slice(0, req.min) };
+    case 'arrange-cards':
+      return { kind: 'arrange', top: [...req.cardIds], bottom: [] };
     case 'pick-card':
       return req.handCount > 0
         ? { kind: 'pick', zone: 'hand' }
-        : { kind: 'pick', zone: 'equip', cardId: req.equips[0] };
+        : req.equips.length > 0
+          ? { kind: 'pick', zone: 'equip', cardId: req.equips[0] }
+          : { kind: 'pick', zone: 'judge', cardId: req.judges[0] };
   }
 }

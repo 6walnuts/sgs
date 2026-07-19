@@ -3,12 +3,14 @@
 
 import type { PendingRequest, Phase, PlayerId, PlayerState, ResponseData } from './types';
 import {
-  ask, card, drawCards, emit, equipCardIds, fail, hasSkill, heal,
-  moveCard, moveCards, player,
+  ask, card, drawCards, emit, equipCardIds, fail, hasSkill, heal, loseHp,
+  markShaUsage, moveCard, moveCards, player, pushFrame,
 } from './kernel';
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed } from './deck';
-import { assertInHand, attackRange, distance, shaLimit, shaUsed } from './rules';
+import {
+  assertInHand, attackRange, distance, kongchengProtected, shaLimit, shaUsed,
+} from './rules';
 import { pushSlash, pushTrick } from './frames';
 import { GENERALS } from './generals';
 
@@ -41,22 +43,63 @@ export function flowRun(ctx: Ctx): void {
   if (!p.alive) { nextTurn(ctx); return; }
   switch (s.turn.phase) {
     case 'start':
+      if (!p.flags._start) {
+        p.flags._start = true;
+        if (hasSkill(s, p, 'guanxing')) {
+          pushFrame(ctx, { type: 'guanxing', step: 'ask', player: p.id });
+        } else if (hasSkill(s, p, 'luoshen')) {
+          pushFrame(ctx, { type: 'luoshen', step: 'ask', player: p.id });
+        }
+        return;
+      }
       setPhase(ctx, 'judge');
       return;
     case 'judge':
-      // 本版无延时锦囊,判定阶段直接跳过
+      if (!p.flags._judge) {
+        p.flags._judge = true;
+        if (p.judgeZone.length > 0) {
+          pushFrame(ctx, {
+            type: 'delayed', step: 'next', who: p.id,
+            queue: [...p.judgeZone].reverse(), // 后放置的先结算
+          });
+        }
+        return;
+      }
       setPhase(ctx, 'draw');
       return;
     case 'draw':
-      drawCards(ctx, p.id, 2);
+      if (!p.flags._draw) {
+        p.flags._draw = true;
+        if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')) {
+          pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
+        } else {
+          let n = 2;
+          if (hasSkill(s, p, 'yingzi')) {
+            emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'yingzi' });
+            n += 1;
+          }
+          drawCards(ctx, p.id, n);
+        }
+        return;
+      }
       setPhase(ctx, 'play');
       return;
     case 'play':
+      if (p.flags.skipPlay && !p.flags.playEnded) {
+        emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'play', reason: 'lebusishu' });
+        p.flags.playEnded = true;
+      }
       if (p.flags.playEnded) { setPhase(ctx, 'discard'); return; }
       ask(ctx, { player: p.id, type: 'play' });
       return;
     case 'discard': {
       const excess = p.hand.length - Math.max(0, p.hp);
+      if (excess > 0 && hasSkill(s, p, 'keji') && !p.flags.anySha) {
+        emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'keji' });
+        emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'discard', reason: 'keji' });
+        setPhase(ctx, 'end');
+        return;
+      }
       if (excess > 0) {
         ask(ctx, {
           player: p.id, type: 'choose-cards', from: 'hand',
@@ -128,6 +171,18 @@ function requireTarget(ctx: Ctx, p: PlayerState, targets: PlayerId[], allowSelf 
   return t;
 }
 
+// 集智:使用非延时锦囊时摸一张
+function afterTrickUse(ctx: Ctx, p: PlayerState): void {
+  if (hasSkill(ctx.s, p, 'jizhi')) {
+    emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jizhi' });
+    drawCards(ctx, p.id, 1);
+  }
+}
+
+function stealableCount(t: PlayerState): number {
+  return t.hand.length + equipCardIds(t).length + t.judgeZone.length;
+}
+
 function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[]): void {
   const s = ctx.s;
   assertInHand(s, p, cardId);
@@ -143,7 +198,7 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
   switch (c.name) {
     case 'sha': {
       const t = requireTarget(ctx, p, targets);
-      startSlash(ctx, p, cardId, t, false);
+      startSlash(ctx, p, cardId, t, undefined);
       return;
     }
     case 'tao': {
@@ -163,30 +218,43 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [p.id] });
       pushTrick(ctx, { cardId, effName: 'wuzhong', source: p.id, target: p.id });
+      afterTrickUse(ctx, p);
       return;
     }
     case 'guohe': {
       const t = requireTarget(ctx, p, targets);
-      if (t.hand.length + equipCardIds(t).length === 0) fail('目标没有牌可拆');
+      if (stealableCount(t) === 0) fail('目标没有牌可拆');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
       pushTrick(ctx, { cardId, effName: 'guohe', source: p.id, target: t.id });
+      afterTrickUse(ctx, p);
       return;
     }
     case 'shunshou': {
       const t = requireTarget(ctx, p, targets);
-      if (t.hand.length + equipCardIds(t).length === 0) fail('目标没有牌可拿');
-      if (distance(s, p.id, t.id) > 1) fail('顺手牵羊只能指定距离 1 以内的目标');
+      if (hasSkill(s, t, 'qianxun')) fail('谦逊:该角色不能成为顺手牵羊的目标');
+      if (stealableCount(t) === 0) fail('目标没有牌可拿');
+      if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > 1) {
+        fail('顺手牵羊只能指定距离 1 以内的目标');
+      }
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
       pushTrick(ctx, { cardId, effName: 'shunshou', source: p.id, target: t.id });
+      afterTrickUse(ctx, p);
       return;
     }
     case 'juedou': {
       const t = requireTarget(ctx, p, targets);
+      if (kongchengProtected(s, t)) fail('空城:该角色不能成为决斗的目标');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
       pushTrick(ctx, { cardId, effName: 'juedou', source: p.id, target: t.id });
+      afterTrickUse(ctx, p);
+      return;
+    }
+    case 'lebusishu': {
+      const t = requireTarget(ctx, p, targets);
+      placeLebusishu(ctx, p, cardId, t);
       return;
     }
     default:
@@ -194,15 +262,30 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
   }
 }
 
-function startSlash(ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState, viaWusheng: boolean): void {
+function placeLebusishu(ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState): void {
+  const s = ctx.s;
+  if (hasSkill(s, t, 'qianxun')) fail('谦逊:该角色不能成为乐不思蜀的目标');
+  if (t.judgeZone.some((id) => card(s, id).name === 'lebusishu')) {
+    fail('目标的判定区已有乐不思蜀');
+  }
+  moveCard(ctx, cardId, { zone: 'judge', player: t.id }, 'play');
+  emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id], as: 'lebusishu' });
+}
+
+function startSlash(
+  ctx: Ctx, p: PlayerState, cardId: number, t: PlayerState,
+  via: 'wusheng' | 'longdan' | undefined,
+): void {
   const s = ctx.s;
   if (t.id === p.id) fail('不能对自己使用杀');
+  if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
   if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
   if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
   p.flags.sha = shaUsed(p) + 1;
+  markShaUsage(ctx, p.id);
   moveCard(ctx, cardId, { zone: 'processing' }, 'play');
-  emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id], as: viaWusheng ? 'sha' : undefined });
-  if (viaWusheng) emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'wusheng' });
+  emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id], as: via ? 'sha' : undefined });
+  if (via) emit(ctx, { type: 'skillInvoked', player: p.id, skill: via });
   pushSlash(ctx, p.id, t.id, cardId);
 }
 
@@ -217,7 +300,16 @@ function useSkill(
       assertInHand(s, p, cardIds[0]);
       if (!isRed(card(s, cardIds[0]).suit)) fail('武圣需要红色牌');
       const t = requireTarget(ctx, p, targets);
-      startSlash(ctx, p, cardIds[0], t, true);
+      startSlash(ctx, p, cardIds[0], t, 'wusheng');
+      return;
+    }
+    case 'longdan': {
+      if (!hasSkill(s, p, 'longdan')) fail('你没有龙胆技能');
+      if (cardIds.length !== 1) fail('龙胆需要选择一张闪');
+      assertInHand(s, p, cardIds[0]);
+      if (card(s, cardIds[0]).name !== 'shan') fail('龙胆出牌时需将闪当杀使用');
+      const t = requireTarget(ctx, p, targets);
+      startSlash(ctx, p, cardIds[0], t, 'longdan');
       return;
     }
     case 'rende': {
@@ -275,6 +367,7 @@ function useSkill(
         if (t.id === p.id) fail('离间不能以自己为目标');
         if (GENERALS[t.general].gender !== 'm') fail('离间只能指定男性角色');
       }
+      if (kongchengProtected(s, b)) fail('空城:该角色不能成为决斗的目标');
       p.flags.lijian = true;
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'lijian' });
       moveCard(ctx, cardIds[0], { zone: 'discard' }, 'lijian');
@@ -288,11 +381,58 @@ function useSkill(
       assertInHand(s, p, cardIds[0]);
       if (!isBlack(card(s, cardIds[0]).suit)) fail('奇袭需要黑色牌');
       const t = requireTarget(ctx, p, targets);
-      if (t.hand.length + equipCardIds(t).length === 0) fail('目标没有牌可拆');
+      if (stealableCount(t) === 0) fail('目标没有牌可拆');
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'qixi' });
       moveCard(ctx, cardIds[0], { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId: cardIds[0], targets: [t.id], as: 'guohe' });
       pushTrick(ctx, { cardId: cardIds[0], effName: 'guohe', source: p.id, target: t.id });
+      return;
+    }
+    case 'guose': {
+      if (!hasSkill(s, p, 'guose')) fail('你没有国色技能');
+      if (cardIds.length !== 1) fail('国色需要选择一张方块牌');
+      const cid = cardIds[0];
+      if (!p.hand.includes(cid) && !equipCardIds(p).includes(cid)) fail('所选牌不属于你');
+      if (card(s, cid).suit !== 'diamond') fail('国色需要方块牌');
+      const t = requireTarget(ctx, p, targets);
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'guose' });
+      placeLebusishu(ctx, p, cid, t);
+      return;
+    }
+    case 'kurou': {
+      if (!hasSkill(s, p, 'kurou')) fail('你没有苦肉技能');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'kurou' });
+      pushFrame(ctx, { type: 'kurou', step: 'draw', player: p.id });
+      loseHp(ctx, p.id, 1); // 若进入濒死,先结算濒死再摸牌
+      return;
+    }
+    case 'jieyin': {
+      if (!hasSkill(s, p, 'jieyin')) fail('你没有结姻技能');
+      if (p.flags.jieyin) fail('结姻每回合限一次');
+      if (cardIds.length !== 2) fail('结姻需要弃置两张手牌');
+      validateChosenHand(p, cardIds, 2, 2);
+      const t = requireTarget(ctx, p, targets);
+      if (GENERALS[t.general].gender !== 'm') fail('结姻只能指定男性角色');
+      if (t.hp >= t.maxHp) fail('目标未受伤');
+      p.flags.jieyin = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jieyin' });
+      moveCards(ctx, cardIds, { zone: 'discard' }, 'jieyin');
+      heal(ctx, t.id, 1);
+      heal(ctx, p.id, 1);
+      return;
+    }
+    case 'fanjian': {
+      if (!hasSkill(s, p, 'fanjian')) fail('你没有反间技能');
+      if (p.flags.fanjian) fail('反间每回合限一次');
+      if (p.hand.length === 0) fail('反间需要有手牌');
+      const t = requireTarget(ctx, p, targets);
+      p.flags.fanjian = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'fanjian' });
+      pushFrame(ctx, { type: 'fanjian', step: 'suit-wait', source: p.id, target: t.id });
+      ask(ctx, {
+        player: t.id, type: 'choose-option',
+        options: ['spade', 'heart', 'club', 'diamond'], canDecline: false, reason: 'fanjian-suit',
+      });
       return;
     }
     default:

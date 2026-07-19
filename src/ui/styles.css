@@ -311,3 +311,14 @@ body {
 .portrait-shu { border-color: #b04a3a; }
 .portrait-wu { border-color: #3f8a5a; }
 .portrait-qun { border-color: #8a8878; }
+
+/* ---------- 判定区与观星 ---------- */
+
+.seat-judges .card-chip { border-color: #7a5ba5; background: #efe6f5; }
+.arrange-zone {
+  width: 100%;
+  border: 1px dashed #4a6a55;
+  border-radius: 8px;
+  padding: 6px;
+  margin-bottom: 4px;
+}

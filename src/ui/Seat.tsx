@@ -74,6 +74,13 @@ export function Seat({
           ))}
         </div>
       )}
+      {p.judgeZone.length > 0 && (
+        <div className="seat-equips seat-judges">
+          {p.judgeZone.map((id) => (
+            <CardChip key={id} state={state} cardId={id} small />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
