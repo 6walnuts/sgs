@@ -8,11 +8,15 @@ export type PlayerCount = 4 | 5 | 8;
 export interface GameConfig {
   seed: number;
   playerCount?: PlayerCount;
-  pickGenerals?: boolean; // 开局选将:主公 5 选 1,其余 3 选 1(默认随机分配)
+  pickGenerals?: boolean;     // 开局选将(默认随机分配)
+  generalCandidates?: number; // 每人候选数(主公额外 +2),默认 3;受武将池上限约束
 }
 
-const LORD_CANDIDATES = 5;
-const OTHER_CANDIDATES = 3;
+// 每人候选数:限制在 [3,6],且保证 count*n + 2(主公加成)不超过武将池
+export function candidateCount(playerCount: number, requested?: number): number {
+  const poolCap = Math.floor((ALL_GENERAL_IDS.length - 2) / playerCount);
+  return Math.max(3, Math.min(requested ?? 3, 6, poolCap));
+}
 
 // 标准身份场配置
 const ROLE_SETS: Record<PlayerCount, Role[]> = {
@@ -75,10 +79,11 @@ export function buildInitialState(config: GameConfig): GameState {
       lord.id,
       ...players.filter((p) => p.id !== lord.id).map((p) => p.id),
     ];
+    const perPlayer = candidateCount(count, config.generalCandidates);
     const candidates: Record<PlayerId, GeneralId[]> = {};
     let cursor = 0;
     for (const pid of queue) {
-      const n = pid === lord.id ? LORD_CANDIDATES : OTHER_CANDIDATES;
+      const n = pid === lord.id ? perPlayer + 2 : perPlayer;
       candidates[pid] = pool.slice(cursor, cursor + n);
       cursor += n;
     }

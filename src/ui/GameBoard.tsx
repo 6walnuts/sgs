@@ -1,6 +1,6 @@
 // 对局棋盘:本地与联机共用。只依赖 GameState + 应答回调,不关心状态来自哪里。
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CardName, GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
 import { GENERALS } from '../engine/generals';
@@ -86,6 +86,93 @@ function multiSelect(skill: ActiveSkill | null): boolean {
   return skill === 'rende' || skill === 'zhiheng' || skill === 'jieyin' || skill === 'zhangba';
 }
 
+// ---------- 指向箭头:出牌/技能指定目标时,从来源座位画箭头到目标座位 ----------
+
+interface ArrowLine { x1: number; y1: number; x2: number; y2: number }
+
+// 从事件里提取"来源 → 目标"关系(排除指向自己)
+function arrowFromEvent(ev: GameState['eventLog'][number]): { source: PlayerId; targets: PlayerId[] } | null {
+  let source: PlayerId;
+  let targets: PlayerId[];
+  if (ev.type === 'cardPlayed' || ev.type === 'virtualCard') {
+    source = ev.player;
+    targets = ev.targets;
+  } else if (ev.type === 'targeted') {
+    source = ev.source;
+    targets = ev.targets;
+  } else {
+    return null;
+  }
+  const others = targets.filter((t) => t !== source);
+  return others.length > 0 ? { source, targets: others } : null;
+}
+
+function useTargetArrows(state: GameState): {
+  boardRef: React.RefObject<HTMLDivElement>;
+  arrows: { key: number; lines: ArrowLine[] } | null;
+} {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const seenRef = useRef(0);
+  const hideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [arrows, setArrows] = useState<{ key: number; lines: ArrowLine[] } | null>(null);
+
+  useEffect(() => () => {
+    if (hideRef.current) clearTimeout(hideRef.current);
+  }, []);
+
+  useEffect(() => {
+    const log = state.eventLog;
+    const from = Math.max(seenRef.current, log.length - 12); // 初次挂载不回放旧箭头
+    seenRef.current = log.length;
+    let found: { key: number; source: PlayerId; targets: PlayerId[] } | null = null;
+    for (let i = from; i < log.length; i++) {
+      const a = arrowFromEvent(log[i]);
+      if (a) found = { key: i, ...a };
+    }
+    if (!found) return;
+    const info = found;
+    // 等 DOM 更新后再量座位位置
+    const raf = requestAnimationFrame(() => {
+      const board = boardRef.current;
+      if (!board) return;
+      const boardRect = board.getBoundingClientRect();
+      const center = (pid: PlayerId) => {
+        const el = board.querySelector(`[data-pid="${pid}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2 - boardRect.left, y: r.top + r.height / 2 - boardRect.top };
+      };
+      const src = center(info.source);
+      if (!src) return;
+      const lines: ArrowLine[] = [];
+      for (const t of info.targets) {
+        const dst = center(t);
+        if (!dst) continue;
+        const dx = dst.x - src.x;
+        const dy = dst.y - src.y;
+        const len = Math.hypot(dx, dy) || 1;
+        // 两端各缩进一段,避免箭头压在头像正中
+        const pad1 = Math.min(30, len / 4);
+        const pad2 = Math.min(48, len / 3);
+        lines.push({
+          x1: src.x + (dx / len) * pad1,
+          y1: src.y + (dy / len) * pad1,
+          x2: dst.x - (dx / len) * pad2,
+          y2: dst.y - (dy / len) * pad2,
+        });
+      }
+      if (lines.length > 0) {
+        setArrows({ key: info.key, lines });
+        if (hideRef.current) clearTimeout(hideRef.current);
+        hideRef.current = setTimeout(() => setArrows(null), 1400);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [state.eventLog.length, state.eventLog]);
+
+  return { boardRef, arrows };
+}
+
 export function GameBoard({
   state, humanId, submit, submitDefault, toast, overContent,
 }: {
@@ -118,6 +205,7 @@ export function GameBoard({
 
   const human = state.players.find((p) => p.id === humanId)!;
   const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards, selDeclare);
+  const { boardRef, arrows } = useTargetArrows(state);
 
   const toggleCard = (id: number) => {
     if (!isMyPlay) return;
@@ -198,7 +286,27 @@ export function GameBoard({
 
   return (
     <div className="app">
-      <div className="board">
+      <div className="board" ref={boardRef}>
+        {arrows && (
+          <svg className="arrow-layer" key={arrows.key}>
+            <defs>
+              <marker
+                id="arrow-head" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#e0b84a" />
+              </marker>
+            </defs>
+            {arrows.lines.map((l, i) => (
+              <line
+                key={i}
+                className="arrow-line"
+                x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                markerEnd="url(#arrow-head)"
+              />
+            ))}
+          </svg>
+        )}
         <div className="seats-top">
           {otherSeats.map((pid) => (
             <Seat

@@ -412,6 +412,7 @@ export type GameEvent =
   | { type: 'chained'; player: PlayerId; chained: boolean }
   | { type: 'flipped'; player: PlayerId; flipped: boolean }
   | { type: 'virtualCard'; player: PlayerId; as: CardName; targets: PlayerId[] }
+  | { type: 'targeted'; source: PlayerId; targets: PlayerId[] } // 指向性技能(无实体牌),供 UI 画箭头
   | { type: 'hpChanged'; player: PlayerId; hp: number; delta: number }
   | { type: 'judge'; player: PlayerId; cardId: CardId; reason: string }
   | { type: 'skillInvoked'; player: PlayerId; skill: SkillName }

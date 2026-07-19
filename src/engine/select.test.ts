@@ -64,6 +64,27 @@ describe('选将模式', () => {
     expect(view.players.find((p) => p.id === other.id)!.unpicked).toBe(true);
   });
 
+  it('候选数设置生效:主公 = 每人 +2;8 人局按武将池自动下调', () => {
+    // 4 人局请求 5:主公 7,其余 5
+    const s = createGame({ seed: 3, pickGenerals: true, generalCandidates: 5 }).state;
+    const frame = s.stack[0];
+    if (frame.type !== 'choose-generals') throw new Error('栈顶应为选将帧');
+    const lord = s.players.find((p) => p.role === 'lord')!;
+    expect(frame.candidates[lord.id]).toHaveLength(7);
+    for (const p of s.players) {
+      if (p.id !== lord.id) expect(frame.candidates[p.id]).toHaveLength(5);
+    }
+    // 8 人局请求 5:武将池 33 不够(8×5+2=42),下调到 3
+    const s8 = createGame({ seed: 3, playerCount: 8, pickGenerals: true, generalCandidates: 5 }).state;
+    const f8 = s8.stack[0];
+    if (f8.type !== 'choose-generals') throw new Error('栈顶应为选将帧');
+    const lord8 = s8.players.find((p) => p.role === 'lord')!;
+    expect(f8.candidates[lord8.id]).toHaveLength(5);
+    for (const p of s8.players) {
+      if (p.id !== lord8.id) expect(f8.candidates[p.id]).toHaveLength(3);
+    }
+  });
+
   it('选将模式下 AI 对战能正常终局', () => {
     for (const seed of [21, 22]) {
       let s = createGame({ seed, pickGenerals: true, playerCount: 5 }).state;

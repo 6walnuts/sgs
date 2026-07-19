@@ -24,6 +24,7 @@ export function Seat({
 
   return (
     <div
+      data-pid={pid}
       className={[
         'seat',
         p.alive ? '' : 'seat-dead',

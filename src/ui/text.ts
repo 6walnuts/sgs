@@ -179,6 +179,8 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
       return `${label(ev.player)} 展示了 ${cardLabel(s, ev.cardId)}`;
     case 'generalChosen':
       return `${seatLabel(s, ev.player)} 选择了武将 ${GENERAL_NAMES[ev.general]}`;
+    case 'targeted':
+      return null; // 仅用于 UI 指向箭头,技能日志由 skillInvoked 承担
     case 'flipped':
       return ev.flipped
         ? `${label(ev.player)} 的武将牌翻面(将跳过一个回合)`

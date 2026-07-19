@@ -43,6 +43,8 @@ class Room {
   state: GameState | null = null;
   playerCount: 4 | 5 | 8 = 4;
   pickGenerals = false;
+  generalCandidates: number | undefined;
+  aiDelayMs: number | undefined; // 房主设置的 AI 出牌延迟(覆盖服务器默认)
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -111,6 +113,7 @@ class Room {
       seed: randomBytes(4).readUInt32BE(0),
       playerCount: this.playerCount,
       pickGenerals: this.pickGenerals,
+      generalCandidates: this.generalCandidates,
     }).state;
     this.broadcastRoom();
     this.broadcastSync();
@@ -144,7 +147,7 @@ class Room {
     const seat = Number(req.player.slice(1));
     const member = this.members.find((m) => m.seat === seat);
     const delay = !member
-      ? this.opts.aiDelayMs
+      ? this.aiDelayMs ?? this.opts.aiDelayMs
       : member.ws === null
         ? this.opts.offlineTimeoutMs
         : this.opts.humanTimeoutMs;
@@ -231,6 +234,12 @@ export function createServer(options: ServerOptions) {
           const room = new Room(id, opts, (r) => rooms.delete(r.id));
           if (msg.playerCount === 5 || msg.playerCount === 8) room.playerCount = msg.playerCount;
           room.pickGenerals = !!msg.pickGenerals;
+          if (typeof msg.generalCandidates === 'number') {
+            room.generalCandidates = Math.max(3, Math.min(6, Math.floor(msg.generalCandidates)));
+          }
+          if (typeof msg.aiDelayMs === 'number') {
+            room.aiDelayMs = Math.max(200, Math.min(3000, Math.floor(msg.aiDelayMs)));
+          }
           rooms.set(id, room);
           const member = room.join(ws, msg.name);
           if (typeof member === 'string') send(ws, { type: 'error', message: member });

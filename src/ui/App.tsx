@@ -7,9 +7,33 @@ import { GameBoard } from './GameBoard';
 
 type PlayerCount = 4 | 5 | 8;
 
+// 对局设置(持久化到 localStorage)
+interface GameSettings {
+  pickGenerals: boolean;
+  generalCandidates: number; // 每人候选武将数(主公 +2);8 人局会被引擎自动下调
+  aiDelayMs: number;
+}
+
+const SETTINGS_KEY = 'sgs-settings';
+const DEFAULT_SETTINGS: GameSettings = { pickGenerals: true, generalCandidates: 3, aiDelayMs: 900 };
+
+function loadSettings(): GameSettings {
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+const AI_DELAY_OPTIONS: Array<{ label: string; ms: number }> = [
+  { label: '快(0.4s)', ms: 400 },
+  { label: '标准(0.9s)', ms: 900 },
+  { label: '慢(1.5s)', ms: 1500 },
+];
+
 type Screen =
   | { kind: 'menu' }
-  | { kind: 'local'; playerCount: PlayerCount; pickGenerals: boolean }
+  | { kind: 'local'; playerCount: PlayerCount; settings: GameSettings }
   | { kind: 'online'; intent: NetIntent };
 
 export function App() {
@@ -19,7 +43,7 @@ export function App() {
     case 'menu':
       return (
         <Menu
-          onLocal={(playerCount, pickGenerals) => setScreen({ kind: 'local', playerCount, pickGenerals })}
+          onLocal={(playerCount, settings) => setScreen({ kind: 'local', playerCount, settings })}
           onOnline={(intent) => setScreen({ kind: 'online', intent })}
         />
       );
@@ -27,7 +51,7 @@ export function App() {
       return (
         <LocalPlay
           playerCount={screen.playerCount}
-          pickGenerals={screen.pickGenerals}
+          settings={screen.settings}
           onExit={toMenu}
         />
       );
@@ -39,13 +63,22 @@ export function App() {
 // ---------- 主菜单 ----------
 
 function Menu({ onLocal, onOnline }: {
-  onLocal: (playerCount: PlayerCount, pickGenerals: boolean) => void;
+  onLocal: (playerCount: PlayerCount, settings: GameSettings) => void;
   onOnline: (intent: NetIntent) => void;
 }) {
   const [name, setName] = useState('玩家');
   const [roomId, setRoomId] = useState('');
   const [playerCount, setPlayerCount] = useState<PlayerCount>(4);
-  const [pickGenerals, setPickGenerals] = useState(true);
+  const [settings, setSettings] = useState<GameSettings>(loadSettings);
+  const update = (patch: Partial<GameSettings>) => {
+    setSettings((cur) => {
+      const next = { ...cur, ...patch };
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+      } catch { /* 隐私模式等存储不可用时忽略 */ }
+      return next;
+    });
+  };
   return (
     <div className="menu">
       <h1 className="menu-title">三国杀</h1>
@@ -65,19 +98,46 @@ function Menu({ onLocal, onOnline }: {
         <div className="menu-row">
           <label>选将</label>
           <button
-            className={pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
-            onClick={() => setPickGenerals(true)}
+            className={settings.pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ pickGenerals: true })}
           >
             自选武将
           </button>
           <button
-            className={!pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
-            onClick={() => setPickGenerals(false)}
+            className={!settings.pickGenerals ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ pickGenerals: false })}
           >
             随机分配
           </button>
         </div>
-        <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount, pickGenerals)}>
+        {settings.pickGenerals && (
+          <div className="menu-row">
+            <label>候选数</label>
+            {[3, 4, 5].map((n) => (
+              <button
+                key={n}
+                className={settings.generalCandidates === n ? 'btn btn-skill btn-skill-on' : 'btn'}
+                onClick={() => update({ generalCandidates: n })}
+              >
+                {n} 选 1
+              </button>
+            ))}
+            <span className="dialog-hint">主公 +2;8 人局自动下调</span>
+          </div>
+        )}
+        <div className="menu-row">
+          <label>出牌延迟</label>
+          {AI_DELAY_OPTIONS.map((o) => (
+            <button
+              key={o.ms}
+              className={settings.aiDelayMs === o.ms ? 'btn btn-skill btn-skill-on' : 'btn'}
+              onClick={() => update({ aiDelayMs: o.ms })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount, settings)}>
           单机游戏(1 人 + {playerCount - 1} AI)
         </button>
         <div className="menu-row">
@@ -86,7 +146,12 @@ function Menu({ onLocal, onOnline }: {
         </div>
         <button
           className="btn btn-primary menu-btn"
-          onClick={() => onOnline({ kind: 'create', name, playerCount, pickGenerals })}
+          onClick={() => onOnline({
+            kind: 'create', name, playerCount,
+            pickGenerals: settings.pickGenerals,
+            generalCandidates: settings.generalCandidates,
+            aiDelayMs: settings.aiDelayMs,
+          })}
         >
           创建联机房间
         </button>
@@ -114,9 +179,9 @@ function Menu({ onLocal, onOnline }: {
 
 // ---------- 单机 ----------
 
-function LocalPlay({ playerCount, pickGenerals, onExit }: {
+function LocalPlay({ playerCount, settings, onExit }: {
   playerCount: PlayerCount;
-  pickGenerals: boolean;
+  settings: GameSettings;
   onExit: () => void;
 }) {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
@@ -125,7 +190,7 @@ function LocalPlay({ playerCount, pickGenerals, onExit }: {
       key={seed}
       seed={seed}
       playerCount={playerCount}
-      pickGenerals={pickGenerals}
+      settings={settings}
       onRestart={() => setSeed(Math.floor(Math.random() * 1e9))}
       onExit={onExit}
     />
@@ -142,16 +207,22 @@ function useToast(): [string | null, (msg: string) => void] {
   return [toast, setToast];
 }
 
-function LocalSession({ seed, playerCount, pickGenerals, onRestart, onExit }: {
+function LocalSession({ seed, playerCount, settings, onRestart, onExit }: {
   seed: number;
   playerCount: PlayerCount;
-  pickGenerals: boolean;
+  settings: GameSettings;
   onRestart: () => void;
   onExit: () => void;
 }) {
   const game = useMemo(
-    () => new LocalGame(seed, playerCount, pickGenerals),
-    [seed, playerCount, pickGenerals],
+    () => new LocalGame({
+      seed,
+      playerCount,
+      pickGenerals: settings.pickGenerals,
+      generalCandidates: settings.generalCandidates,
+      aiDelayMs: settings.aiDelayMs,
+    }),
+    [seed, playerCount, settings],
   );
   const [state, setState] = useState<GameState>(game.state);
   const [toast, setToast] = useToast();

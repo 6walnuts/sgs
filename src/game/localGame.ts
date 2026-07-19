@@ -6,16 +6,31 @@ import { applyAction, createGame } from '../engine/engine';
 import { decide, defaultResponse } from '../ai/simpleAi';
 
 export const HUMAN_ID = 'p0';
-const AI_DELAY_MS = 900; // 出牌间隔,便于观察局势
+const DEFAULT_AI_DELAY_MS = 900; // 出牌间隔,便于观察局势
+
+export interface LocalGameOptions {
+  seed: number;
+  playerCount?: 4 | 5 | 8;
+  pickGenerals?: boolean;
+  generalCandidates?: number; // 每人候选武将数(主公 +2)
+  aiDelayMs?: number;         // AI 出牌延迟
+}
 
 export class LocalGame {
   state: GameState;
   private listeners: Array<(s: GameState) => void> = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private paused = true;
+  private readonly aiDelayMs: number;
 
-  constructor(seed: number, playerCount: 4 | 5 | 8 = 4, pickGenerals = false) {
-    this.state = createGame({ seed, playerCount, pickGenerals }).state;
+  constructor(opts: LocalGameOptions) {
+    this.aiDelayMs = opts.aiDelayMs ?? DEFAULT_AI_DELAY_MS;
+    this.state = createGame({
+      seed: opts.seed,
+      playerCount: opts.playerCount ?? 4,
+      pickGenerals: opts.pickGenerals,
+      generalCandidates: opts.generalCandidates,
+    }).state;
   }
 
   onChange(fn: (s: GameState) => void): () => void {
@@ -69,7 +84,7 @@ export class LocalGame {
     if (this.timer) clearTimeout(this.timer);
     const req = this.state.pendingRequest;
     if (this.paused || !req || req.player === HUMAN_ID || this.state.winner) return;
-    this.timer = setTimeout(() => this.stepAi(), AI_DELAY_MS);
+    this.timer = setTimeout(() => this.stepAi(), this.aiDelayMs);
   }
 
   private stepAi(): void {

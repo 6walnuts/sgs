@@ -511,6 +511,7 @@ function useSkill(
       if (new Set(cardIds).size !== cardIds.length) fail('不能重复选择同一张牌');
       const t = requireTarget(ctx, p, targets);
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'rende' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
       moveCards(ctx, cardIds, { zone: 'hand', player: t.id }, 'rende');
       const given = (typeof p.flags.rende === 'number' ? p.flags.rende : 0) + cardIds.length;
       p.flags.rende = given;
@@ -543,6 +544,7 @@ function useSkill(
       if (t.hp >= t.maxHp) fail('目标体力已满');
       p.flags.qingnang = true;
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'qingnang' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
       moveCard(ctx, cardIds[0], { zone: 'discard' }, 'qingnang');
       heal(ctx, t.id, 1);
       return;
@@ -562,6 +564,7 @@ function useSkill(
       if (kongchengProtected(s, b)) fail('空城:该角色不能成为决斗的目标');
       p.flags.lijian = true;
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'lijian' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [a.id, b.id] });
       moveCard(ctx, cardIds[0], { zone: 'discard' }, 'lijian');
       // 视为 targets[0] 对 targets[1] 使用决斗,可被无懈可击
       pushTrick(ctx, { cardId: null, effName: 'juedou', source: a.id, target: b.id });
@@ -608,6 +611,7 @@ function useSkill(
       if (t.hp >= t.maxHp) fail('目标未受伤');
       p.flags.jieyin = true;
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jieyin' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
       moveCards(ctx, cardIds, { zone: 'discard' }, 'jieyin');
       heal(ctx, t.id, 1);
       heal(ctx, p.id, 1);
@@ -628,6 +632,7 @@ function useSkill(
       const t = requireTarget(ctx, p, targets);
       p.flags.fanjian = true;
       emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'fanjian' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
       pushFrame(ctx, { type: 'fanjian', step: 'suit-wait', source: p.id, target: t.id });
       ask(ctx, {
         player: t.id, type: 'choose-option',

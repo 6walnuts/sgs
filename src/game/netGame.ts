@@ -7,7 +7,8 @@ import { defaultResponse } from '../ai/simpleAi';
 import type { ClientMessage, ServerMessage } from '../net/protocol';
 
 export type NetIntent =
-  | { kind: 'create'; name: string; playerCount?: 4 | 5 | 8; pickGenerals?: boolean }
+  | { kind: 'create'; name: string; playerCount?: 4 | 5 | 8; pickGenerals?: boolean;
+      generalCandidates?: number; aiDelayMs?: number }
   | { kind: 'join'; roomId: string; name: string };
 
 export type NetStatus = 'connecting' | 'open' | 'closed' | 'failed';
@@ -85,6 +86,7 @@ export class NetGame {
         this.send({
           type: 'create-room', name: this.intent.name,
           playerCount: this.intent.playerCount, pickGenerals: this.intent.pickGenerals,
+          generalCandidates: this.intent.generalCandidates, aiDelayMs: this.intent.aiDelayMs,
         });
       } else {
         this.send({ type: 'join-room', roomId: this.intent.roomId, name: this.intent.name });
