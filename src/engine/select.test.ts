@@ -74,11 +74,10 @@ describe('选将模式', () => {
     for (const p of s.players) {
       if (p.id !== lord.id) expect(frame.candidates[p.id]).toHaveLength(5);
     }
-    // 8 人局请求 6:候选数被武将池大小钳制(总数 8n+2 不能超过池子)
+    // 8 人局请求 99:候选数被钳制到 min(6, 池子容量)
     const cap = Math.floor((ALL_GENERAL_IDS.length - 2) / 8);
     const expected = Math.min(6, cap);
-    expect(expected).toBeLessThan(6); // 池子确实不够 8×6+2
-    const s8 = createGame({ seed: 3, playerCount: 8, pickGenerals: true, generalCandidates: 6 }).state;
+    const s8 = createGame({ seed: 3, playerCount: 8, pickGenerals: true, generalCandidates: 99 }).state;
     const f8 = s8.stack[0];
     if (f8.type !== 'choose-generals') throw new Error('栈顶应为选将帧');
     const lord8 = s8.players.find((p) => p.role === 'lord')!;

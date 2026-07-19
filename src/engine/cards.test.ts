@@ -74,10 +74,12 @@ describe('群体锦囊', () => {
     expect(req).toMatchObject({ player: 'p0', type: 'choose-cards', from: 'shown' });
     const shown = (req as Extract<typeof req, { type: 'choose-cards' }>).shownIds!;
     expect(shown).toHaveLength(4);
-    s = act(s, { kind: 'cards', cardIds: [shown[0]] });
-    s = act(s, { kind: 'cards', cardIds: [shown[1]] });
-    s = act(s, { kind: 'cards', cardIds: [shown[2]] });
-    s = act(s, { kind: 'cards', cardIds: [shown[3]] });
+    for (let i = 0; i < 4; i++) {
+      // 若前面有人拿到了无懈可击,会先被询问是否响应五谷:一律放弃
+      while (s.pendingRequest?.type === 'respond-card') s = act(s, { kind: 'decline' });
+      s = act(s, { kind: 'cards', cardIds: [shown[i]] });
+    }
+    while (s.pendingRequest?.type === 'respond-card') s = act(s, { kind: 'decline' });
     expect(P(s, 'p0').hand).toContain(shown[0]);
     expect(P(s, 'p1').hand).toContain(shown[1]);
     expect(P(s, 'p2').hand).toContain(shown[2]);

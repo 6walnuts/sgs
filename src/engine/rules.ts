@@ -120,6 +120,8 @@ export function validateResponseCard(
       return resp.cardId;
   }
   if (pattern === 'sha') {
+    // 禁酒:高顺的酒均视为杀
+    if (c.name === 'jiu' && hasSkill(s, p, 'jinjiu')) return resp.cardId;
     if (!isShaCard(c.name)) fail('打出的牌与要求不符');
     return resp.cardId;
   }

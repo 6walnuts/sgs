@@ -63,6 +63,17 @@ const GENERALS = [
   { id: 'sunjian', name: '孙坚', candidates: ['Sun Jian Qing illustration.jpg'], search: 'Sun Jian illustration Romance of the Three Kingdoms' },
   { id: 'dongzhuo', name: '董卓', candidates: ['Dong Zhuo Qing illustration.jpg'], search: 'Dong Zhuo illustration Romance of the Three Kingdoms' },
   { id: 'jiaxu', name: '贾诩', candidates: ['Jia Xu Qing illustration.jpg'], search: 'Jia Xu illustration Romance of the Three Kingdoms' },
+  { id: 'caozhi', name: '曹植', candidates: ['Cao Zhi Qing illustration.jpg'], search: 'Cao Zhi illustration poet' },
+  { id: 'zhangchunhua', name: '张春华', candidates: [], search: 'Zhang Chunhua illustration' },
+  { id: 'yujin', name: '于禁', candidates: ['Yu Jin Qing illustration.jpg'], search: 'Yu Jin illustration Romance of the Three Kingdoms' },
+  { id: 'fazheng', name: '法正', candidates: ['Fa Zheng Qing illustration.jpg'], search: 'Fa Zheng illustration Romance of the Three Kingdoms' },
+  { id: 'masu', name: '马谡', candidates: ['Ma Su Qing illustration.jpg'], search: 'Ma Su illustration Romance of the Three Kingdoms' },
+  { id: 'xushu', name: '徐庶', candidates: ['Xu Shu Qing illustration.jpg'], search: 'Xu Shu illustration Romance of the Three Kingdoms' },
+  { id: 'lingtong', name: '凌统', candidates: ['Ling Tong Qing illustration.jpg'], search: 'Ling Tong illustration Romance of the Three Kingdoms' },
+  { id: 'xusheng', name: '徐盛', candidates: ['Xu Sheng Qing illustration.jpg'], search: 'Xu Sheng illustration Romance of the Three Kingdoms' },
+  { id: 'wuguotai', name: '吴国太', candidates: [], search: 'Lady Wu illustration Romance of the Three Kingdoms' },
+  { id: 'chengong', name: '陈宫', candidates: ['Chen Gong Qing illustration.jpg'], search: 'Chen Gong illustration Romance of the Three Kingdoms' },
+  { id: 'gaoshun', name: '高顺', candidates: [], search: 'Gao Shun illustration Romance of the Three Kingdoms' },
 ];
 
 const PD_PATTERN = /public\s*domain|^pd\b|pd-|cc0/i;

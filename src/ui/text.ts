@@ -29,6 +29,10 @@ export const GENERAL_NAMES: Record<string, string> = {
   taishici: '太史慈', pangde: '庞德', yanliangwenchou: '颜良文丑', yuanshao: '袁绍',
   caopi: '曹丕', xuhuang: '徐晃', menghuo: '孟获', zhurong: '祝融',
   lusu: '鲁肃', sunjian: '孙坚', dongzhuo: '董卓', jiaxu: '贾诩',
+  caozhi: '曹植', zhangchunhua: '张春华', yujin: '于禁',
+  fazheng: '法正', masu: '马谡', xushu: '徐庶',
+  lingtong: '凌统', xusheng: '徐盛', wuguotai: '吴国太',
+  chengong: '陈宫', gaoshun: '高顺',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -57,6 +61,11 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   haoshi: '好施', dimeng: '缔盟', jiuchi: '酒池', roulin: '肉林',
   benghuai: '崩坏', baonve: '暴虐', wansha: '完杀', luanwu: '乱武',
   weimu: '帷幕', yinghun: '英魂',
+  luoying: '落英', jiushi: '酒诗', jueqing: '绝情', shangshi: '伤逝',
+  yizhong: '毅重', enyuan: '恩怨', xuanhuo: '眩惑', xinzhan: '心战',
+  huilei: '挥泪', wuyan: '无言', jujian: '举荐', xuanfeng: '旋风',
+  pojun: '破军', ganlu: '甘露', buyi: '补益', mingce: '明策',
+  zhichi: '智迟', xianzhen: '陷阵', jinjiu: '禁酒',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -84,6 +93,13 @@ export const SKILL_HINTS: Record<string, string> = {
   dimeng: '选两名其他角色,弃置两者手牌数之差的牌,令他们交换手牌(每回合一次)',
   jiuchi: '将一张黑桃手牌当酒使用',
   luanwu: '限定技:所有其他角色依次选择,对各自距离最近的角色使用杀,或失去1点体力',
+  jiushi: '翻面并视为使用一张酒(背面时受到伤害后自动翻回)',
+  xuanhuo: '交给一名其他角色一张红桃手牌,然后获得其一张牌并转交第三名角色(每回合一次)',
+  xinzhan: '手牌数大于体力上限时,观看牌堆顶三张并获得其中的红桃(每回合一次)',
+  jujian: '弃一至三张牌令一名其他角色摸等量;弃满三张同类别回复1点体力(每回合一次)',
+  ganlu: '令两名角色交换装备区的牌,装备数差不能超过你已损失的体力(每回合一次)',
+  mingce: '交给一名其他角色一张装备牌或杀,其选择视为对你指定的角色出杀、或摸一张牌(每回合一次)',
+  xianzhen: '与一名角色拼点:赢则本回合对其出杀无距离次数限制且无视防具,输则本回合不能出杀(每回合一次)',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -292,6 +308,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return '好施:选择一半手牌交给手牌最少的一名其他角色';
         case 'yinghun':
           return '英魂:请弃置指定数量的手牌';
+        case 'enyuan':
+          return '恩怨:交出一张红桃手牌,否则失去1点体力(点放弃)';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -333,6 +351,10 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'baonve': return '是否发动【暴虐】判定?(黑桃则主公回复1点体力)';
         case 'benghuai': return '崩坏:你不是体力最小的角色,失去1点体力或减1点体力上限';
         case 'yinghun': return '英魂:选择令目标摸X弃一,或摸一弃X(X=你已损失的体力)';
+        case 'buyi': return '是否发动【补益】展示濒死者一张手牌?(非基本牌则弃之令其回复1点)';
+        case 'pojun': return '是否发动【破军】令目标摸牌(其体力值)并翻面?';
+        case 'xuanfeng': return '旋风:失去装备后,视为出杀或对距离1的角色造成1点伤害';
+        case 'mingce': return '明策:视为对指定角色使用杀,或摸一张牌';
       }
       return '';
     case 'choose-player':
@@ -345,6 +367,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'quhu': return '驱虎:选择拼点对象攻击范围内的一名角色,由其对之造成1点伤害';
         case 'fangzhu': return '放逐:令一名其他角色翻面并摸等同于你已损失体力的牌';
         case 'yinghun': return '英魂:选择一名其他角色(摸X弃一或摸一弃X,X=你已损失的体力)';
+        case 'xuanhuo': return '眩惑:选择获得这张牌的角色(不能是原持有者)';
+        case 'xuanfeng': return '旋风:选择目标角色';
         case 'haoshi': return '好施:选择获得这些牌的角色(手牌最少者)';
         case 'luanwu': return '乱武:选择距离最近的一名角色作为杀的目标';
         default: return '请选择目标角色';
@@ -404,6 +428,12 @@ export const OPTION_LABELS: Record<string, string> = {
   'benghuai-maxhp': '减1点体力上限',
   'yinghun-a': '摸X张弃一张',
   'yinghun-b': '摸一张弃X张',
+  buyi: '发动补益',
+  pojun: '发动破军',
+  'xuanfeng-sha': '视为使用杀',
+  'xuanfeng-damage': '对距离1造成伤害',
+  'mingce-sha': '视为使用杀',
+  'mingce-draw': '摸一张牌',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',

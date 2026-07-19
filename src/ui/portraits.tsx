@@ -268,6 +268,18 @@ const PORTRAITS: Record<GeneralId, () => ReactNode> = {
   sunjian: () => Generic({ skin: '#dcae7e', robe: '#a5443a', trim: '#d8b84a', hat: 'helmet', hatColor: '#7a2f28', beard: 'short', fierce: true, extra: 'plume' }),
   dongzhuo: () => Generic({ skin: '#cf9663', robe: '#4c4456', trim: '#caa14a', hat: 'circlet', beard: 'full', fierce: true }),
   jiaxu: () => Generic({ skin: '#e0c39a', robe: '#5c6b7a', trim: '#8a94a0', hat: 'scholar', hatColor: '#3a4550', beard: 'goatee' }),
+  // 一将成名 2011
+  caozhi: () => Generic({ skin: '#f2ddc0', robe: '#46608c', trim: '#e8dc9a', hat: 'scholar', hatColor: '#2c3f5c', beard: 'none' }),
+  zhangchunhua: () => Generic({ skin: '#f6dfc6', robe: '#3a5170', trim: '#dfe8f5', female: true, fierce: true }),
+  yujin: () => Generic({ skin: '#dcae7e', robe: '#2f4a6b', trim: '#8a94a0', hat: 'helmet', hatColor: '#2a3a50', beard: 'short' }),
+  fazheng: () => Generic({ skin: '#ecd6b0', robe: '#8a4536', trim: '#e8dc9a', hat: 'scholar', hatColor: '#5c2b24', beard: 'goatee' }),
+  masu: () => Generic({ skin: '#eccfa4', robe: '#b04a3a', trim: '#f0d8b0', hat: 'ribbon', hatColor: '#8a3a30', beard: 'none' }),
+  xushu: () => Generic({ skin: '#e0c39a', robe: '#6b5a3a', trim: '#c9c4a4', hat: 'scholar', hatColor: '#4a3d28', beard: 'goatee' }),
+  lingtong: () => Generic({ skin: '#dcae7e', robe: '#3f6b50', trim: '#d8b84a', hat: 'ribbon', hatColor: '#2c4a38', beard: 'none', fierce: true }),
+  xusheng: () => Generic({ skin: '#cf9663', robe: '#2f6b45', trim: '#caa14a', hat: 'helmet', hatColor: '#1e4a30', beard: 'stubble', fierce: true }),
+  wuguotai: () => Generic({ skin: '#f2d8ba', robe: '#7a5a6b', trim: '#e8d8e0', female: true, old: true }),
+  chengong: () => Generic({ skin: '#ecd6b0', robe: '#6b6a58', trim: '#d5d0b8', hat: 'scholar', hatColor: '#4c4a3e', beard: 'goatee' }),
+  gaoshun: () => Generic({ skin: '#c98a55', robe: '#5c5c66', trim: '#8a94a0', hat: 'helmet', hatColor: '#3f4048', beard: 'stubble', fierce: true }),
   liubei: () => (
     <>
       <Face skin="#eac49c" neck="#d8ab7f" />

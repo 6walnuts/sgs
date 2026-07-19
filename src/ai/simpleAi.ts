@@ -468,6 +468,16 @@ function decideOption(
       return p.hand.length + 2 <= 5 ? { kind: 'option', index: 0 } : { kind: 'decline' };
     case 'yinghun':
       return { kind: 'option', index: 0 }; // 摸X弃一,对队友收益最大
+    case 'buyi':
+      return { kind: 'option', index: 0 }; // 简化:总是尝试救(目标是敌是友都可能)
+    case 'pojun': {
+      // 翻面通常值得,除非目标满编手牌收益太大——简化:总是发动
+      return { kind: 'option', index: 0 };
+    }
+    case 'xuanfeng':
+      return { kind: 'option', index: 0 }; // 视为出杀
+    case 'mingce':
+      return { kind: 'option', index: 1 }; // 保守:摸一张(杀的目标可能是队友)
     case 'benghuai':
       // 体力充裕时掉体力,残血时掉上限
       return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
@@ -528,6 +538,11 @@ function decideChooseCards(
     case 'pindian': {
       const best = p.hand.slice().sort((a, b) => card(s, b).rank - card(s, a).rank)[0];
       return { kind: 'cards', cardIds: [best] };
+    }
+    case 'enyuan': {
+      const heart = sortByScoreAsc(s, p, p.hand).filter((id) => card(s, id).suit === 'heart');
+      if (heart.length > 0) return { kind: 'cards', cardIds: [heart[0]] };
+      return { kind: 'decline' }; // 没红桃只能失去体力
     }
     case 'shensu-equip': {
       const equips = Object.values(p.equips).filter((id): id is CardId => id !== undefined);
@@ -606,6 +621,15 @@ function decideChoosePlayer(
     case 'luanwu': {
       const t = enemies[0] ?? cands[0];
       return { kind: 'players', players: [t.id] };
+    }
+    case 'xuanfeng': {
+      const t = enemies[0];
+      if (t) return { kind: 'players', players: [t.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'xuanhuo': {
+      const ally = cands.find((x) => !isEnemy(s, p.role, x));
+      return { kind: 'players', players: [(ally ?? cands[0]).id] };
     }
     default: {
       if (req.canDecline) return { kind: 'decline' };

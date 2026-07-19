@@ -10,7 +10,7 @@ import {
   pushFrame,
 } from './kernel';
 import type { Ctx } from './kernel';
-import { equipSlotOf, isBlack, isRed, shaElement } from './deck';
+import { equipSlotOf, isBlack, isRed, isShaCard, shaElement } from './deck';
 import {
   assertInHand, attackRange, distance, handLimit, kongchengProtected, shaLimit, shaUsed,
 } from './rules';
@@ -29,6 +29,8 @@ export function nextTurn(ctx: Ctx): void {
   const s = ctx.s;
   const cur = player(s, s.turn.activePlayer);
   cur.flags = {};
+  // 智迟的免疫只持续到该回合结束
+  for (const x of s.players) delete x.flags.zhichi;
   const n = s.players.length;
   let seat = cur.seat;
   // 翻面的角色轮到时翻回并跳过该回合;两圈保证全员翻面时也能找到下一个行动者
@@ -227,6 +229,14 @@ function assertNotWeimu(ctx: Ctx, cardId: number, t: PlayerState): void {
   }
 }
 
+// 无言:徐庶使用的非延时锦囊无效(简化为不能使用),他人的非延时锦囊对其无效(简化为不能指定)
+function assertNotWuyan(ctx: Ctx, p: PlayerState, t?: PlayerState): void {
+  if (hasSkill(ctx.s, p, 'wuyan')) fail('无言:你不能使用非延时锦囊');
+  if (t && t.id !== p.id && hasSkill(ctx.s, t, 'wuyan')) {
+    fail('无言:该角色不能成为非延时锦囊的目标');
+  }
+}
+
 // 集智:使用非延时锦囊时摸一张
 function afterTrickUse(ctx: Ctx, p: PlayerState): void {
   if (hasSkill(ctx.s, p, 'jizhi')) {
@@ -241,7 +251,13 @@ function stealableCount(t: PlayerState): number {
 
 function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[]): void {
   assertInHand(ctx.s, p, cardId);
-  playAs(ctx, p, cardId, card(ctx.s, cardId).name, targets);
+  let name = card(ctx.s, cardId).name;
+  // 禁酒:高顺的酒均视为杀
+  if (name === 'jiu' && hasSkill(ctx.s, p, 'jinjiu')) {
+    emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jinjiu' });
+    name = 'sha';
+  }
+  playAs(ctx, p, cardId, name, targets);
 }
 
 // 按 name 指定的牌名结算(蛊惑声明的牌名可能与实体牌不同;供 frames 注入调用)
@@ -271,6 +287,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       return;
     }
     case 'huogong': {
+      assertNotWuyan(ctx, p, targets.length === 1 ? player(s, targets[0]) : undefined);
       const t = requireTarget(ctx, p, targets, true); // 火攻可以对自己
       if (t.hand.length === 0) fail('目标没有手牌');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
@@ -290,6 +307,8 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       if (targets.length > 2 || new Set(targets).size !== targets.length) {
         fail('铁索连环至多指定两名角色');
       }
+      assertNotWuyan(ctx, p);
+      for (const pid of targets) assertNotWuyan(ctx, p, player(s, pid));
       for (const pid of targets) {
         const t = player(s, pid);
         if (!t.alive) fail('目标已死亡');
@@ -332,6 +351,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       fail('无懈可击只能在响应锦囊时打出');
       return;
     case 'wuzhong': {
+      assertNotWuyan(ctx, p);
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [p.id] });
       pushTrick(ctx, { cardId, effName: 'wuzhong', source: p.id, target: p.id });
@@ -341,6 +361,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     case 'guohe': {
       const t = requireTarget(ctx, p, targets);
       assertNotWeimu(ctx, cardId, t);
+      assertNotWuyan(ctx, p, t);
       if (stealableCount(t) === 0) fail('目标没有牌可拆');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
@@ -351,6 +372,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     case 'shunshou': {
       const t = requireTarget(ctx, p, targets);
       assertNotWeimu(ctx, cardId, t);
+      assertNotWuyan(ctx, p, t);
       if (hasSkill(s, t, 'qianxun')) fail('谦逊:该角色不能成为顺手牵羊的目标');
       if (stealableCount(t) === 0) fail('目标没有牌可拿');
       if (!hasSkill(s, p, 'qicai') && distance(s, p.id, t.id) > 1) {
@@ -365,6 +387,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     case 'juedou': {
       const t = requireTarget(ctx, p, targets);
       assertNotWeimu(ctx, cardId, t);
+      assertNotWuyan(ctx, p, t);
       if (kongchengProtected(s, t)) fail('空城:该角色不能成为决斗的目标');
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [t.id] });
@@ -387,7 +410,9 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
     }
     case 'nanman':
     case 'wanjian': {
-      const queue = orderFrom(s).filter((pid) => pid !== p.id);
+      assertNotWuyan(ctx, p);
+      const queue = orderFrom(s)
+        .filter((pid) => pid !== p.id && !hasSkill(s, player(s, pid), 'wuyan'));
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
       pushFrame(ctx, {
@@ -397,7 +422,8 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       return;
     }
     case 'taoyuan': {
-      const queue = orderFrom(s);
+      assertNotWuyan(ctx, p);
+      const queue = orderFrom(s).filter((pid) => !hasSkill(s, player(s, pid), 'wuyan'));
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
       pushFrame(ctx, {
@@ -407,6 +433,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       return;
     }
     case 'wugu': {
+      assertNotWuyan(ctx, p);
       const queue = orderFrom(s);
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
@@ -424,6 +451,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
       return;
     }
     case 'jiedao': {
+      assertNotWuyan(ctx, p, targets.length >= 1 ? player(s, targets[0]) : undefined);
       if (targets.length !== 2 || targets[0] === targets[1]) fail('借刀杀人需要选择持武器者与杀的目标');
       const a = player(s, targets[0]);
       const b = player(s, targets[1]);
@@ -465,8 +493,13 @@ function startSlash(
 ): void {
   const s = ctx.s;
   if (p.flags.tianyiLose) fail('天义拼点失败:本回合不能使用杀');
+  if (p.flags.xianzhenLose) fail('陷阵拼点失败:本回合不能使用杀');
   if (targets.length === 0) fail('需要选择目标');
   if (new Set(targets).size !== targets.length) fail('不能重复选择目标');
+  // 陷阵拼点赢:对该角色使用杀无距离限制、不限次数、无视防具
+  const xzSeat = typeof p.flags.xianzhen === 'number' ? p.flags.xianzhen : null;
+  const xianzhen = xzSeat !== null
+    && targets.every((t) => player(s, t).seat === xzSeat);
   if (targets.length > 1) {
     // 方天画戟:杀是最后的手牌时可指定至多三个目标
     const w = p.equips.weapon;
@@ -480,13 +513,14 @@ function startSlash(
     if (!t.alive) fail('目标已死亡');
     if (t.id === p.id) fail('不能对自己使用杀');
     if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
-    // 天义拼点赢:本回合使用杀无距离限制
-    if (!p.flags.tianyiWin && distance(s, p.id, t.id) > attackRange(s, p)) {
+    // 天义/陷阵拼点赢:本回合使用杀无距离限制
+    if (!p.flags.tianyiWin && !xianzhen
+        && distance(s, p.id, t.id) > attackRange(s, p)) {
       fail('目标超出攻击范围');
     }
   }
-  if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
-  p.flags.sha = shaUsed(p) + 1;
+  if (!xianzhen && shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
+  if (!xianzhen) p.flags.sha = shaUsed(p) + 1;
   markShaUsage(ctx, p.id);
   const jiuBonus = !!p.flags.jiuBuff;
   p.flags.jiuBuff = false; // 酒的增益附着在这张杀上
@@ -502,6 +536,7 @@ function startSlash(
       extraCardIds: extraCardIds.length > 0 ? [...extraCardIds] : undefined,
       noSuit: via === 'zhangba' ? true : undefined,
       jiuBonus: jiuBonus ? true : undefined,
+      ignoreArmor: xianzhen ? true : undefined,
       element,
     });
   }
@@ -813,6 +848,129 @@ function useSkill(
       const queue = orderFrom(s).filter((pid) => pid !== p.id);
       emit(ctx, { type: 'targeted', source: p.id, targets: queue });
       pushFrame(ctx, { type: 'luanwu', step: 'next', source: p.id, queue, idx: 0 });
+      return;
+    }
+    case 'jiushi': {
+      if (!hasSkill(s, p, 'jiushi')) fail('你没有酒诗技能');
+      if (p.flipped) fail('武将牌背面朝上时不能发动酒诗');
+      if (p.flags.jiuUsed) fail('每回合限使用一次酒');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jiushi' });
+      p.flipped = true;
+      emit(ctx, { type: 'flipped', player: p.id, flipped: true });
+      emit(ctx, { type: 'virtualCard', player: p.id, as: 'jiu', targets: [p.id] });
+      p.flags.jiuUsed = true;
+      p.flags.jiuBuff = true;
+      return;
+    }
+    case 'xuanhuo': {
+      if (!hasSkill(s, p, 'xuanhuo')) fail('你没有眩惑技能');
+      if (p.flags.xuanhuo) fail('眩惑每回合限一次');
+      if (cardIds.length !== 1) fail('眩惑需要交出一张红桃手牌');
+      assertInHand(s, p, cardIds[0]);
+      if (card(s, cardIds[0]).suit !== 'heart') fail('眩惑需要红桃手牌');
+      const t = requireTarget(ctx, p, targets);
+      p.flags.xuanhuo = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'xuanhuo' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      moveCard(ctx, cardIds[0], { zone: 'hand', player: t.id }, 'xuanhuo');
+      pushFrame(ctx, { type: 'xuanhuo', step: 'pick-wait', source: p.id, target: t.id });
+      return;
+    }
+    case 'xinzhan': {
+      if (!hasSkill(s, p, 'xinzhan')) fail('你没有心战技能');
+      if (p.flags.xinzhan) fail('心战每回合限一次');
+      if (p.hand.length <= p.maxHp) fail('心战需要手牌数大于体力上限');
+      p.flags.xinzhan = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'xinzhan' });
+      // 观看牌堆顶三张,自动获得其中的红桃,其余按原顺序留在牌堆顶(简化)
+      const top = s.drawPile.slice(0, 3);
+      for (const cid of top) {
+        if (card(s, cid).suit === 'heart') {
+          emit(ctx, { type: 'cardRevealed', player: p.id, cardId: cid, reason: 'xinzhan' });
+          moveCard(ctx, cid, { zone: 'hand', player: p.id }, 'xinzhan');
+        }
+      }
+      return;
+    }
+    case 'jujian': {
+      if (!hasSkill(s, p, 'jujian')) fail('你没有举荐技能');
+      if (p.flags.jujian) fail('举荐每回合限一次');
+      if (cardIds.length < 1 || cardIds.length > 3) fail('举荐需要弃置一至三张牌');
+      if (new Set(cardIds).size !== cardIds.length) fail('不能重复选择同一张牌');
+      for (const id of cardIds) {
+        if (!p.hand.includes(id) && !equipCardIds(p).includes(id)) fail('所选牌不属于你');
+      }
+      const t = requireTarget(ctx, p, targets);
+      p.flags.jujian = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jujian' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      const category = (id: number): string => {
+        const n = card(s, id).name;
+        if (['sha', 'huosha', 'leisha', 'shan', 'tao', 'jiu'].includes(n)) return 'basic';
+        return equipSlotOf(n) !== null ? 'equip' : 'trick';
+      };
+      const sameKind = cardIds.length === 3
+        && new Set(cardIds.map(category)).size === 1;
+      moveCards(ctx, cardIds, { zone: 'discard' }, 'jujian');
+      drawCards(ctx, t.id, cardIds.length);
+      if (sameKind) heal(ctx, p.id, 1);
+      return;
+    }
+    case 'ganlu': {
+      if (!hasSkill(s, p, 'ganlu')) fail('你没有甘露技能');
+      if (p.flags.ganlu) fail('甘露每回合限一次');
+      if (targets.length !== 2 || targets[0] === targets[1]) fail('甘露需要选择两名角色');
+      const [a, b] = targets.map((id) => player(s, id));
+      if (!a.alive || !b.alive) fail('目标已死亡');
+      const ea = equipCardIds(a);
+      const eb = equipCardIds(b);
+      if (Math.abs(ea.length - eb.length) > p.maxHp - p.hp) {
+        fail('甘露:交换的装备数之差不能超过你已损失的体力值');
+      }
+      p.flags.ganlu = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'ganlu' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [a.id, b.id] });
+      if (ea.length > 0) moveCards(ctx, ea, { zone: 'processing' }, 'ganlu');
+      if (eb.length > 0) moveCards(ctx, eb, { zone: 'processing' }, 'ganlu');
+      for (const id of ea) moveCard(ctx, id, { zone: 'equip', player: b.id }, 'ganlu');
+      for (const id of eb) moveCard(ctx, id, { zone: 'equip', player: a.id }, 'ganlu');
+      return;
+    }
+    case 'mingce': {
+      if (!hasSkill(s, p, 'mingce')) fail('你没有明策技能');
+      if (p.flags.mingce) fail('明策每回合限一次');
+      if (cardIds.length !== 1) fail('明策需要交出一张装备牌或杀');
+      const cid = cardIds[0];
+      if (!p.hand.includes(cid) && !equipCardIds(p).includes(cid)) fail('所选牌不属于你');
+      const cname = card(s, cid).name;
+      if (!isShaCard(cname) && equipSlotOf(cname) === null) fail('明策需要装备牌或杀');
+      if (targets.length !== 2 || targets[0] === targets[1]) fail('明策需要选择受赠者与杀的目标');
+      const receiver = player(s, targets[0]);
+      const victim = player(s, targets[1]);
+      if (!receiver.alive || !victim.alive) fail('目标已死亡');
+      if (receiver.id === p.id) fail('明策不能以自己为受赠者');
+      if (distance(s, receiver.id, victim.id) > attackRange(s, receiver)) {
+        fail('杀的目标须在受赠者的攻击范围内');
+      }
+      p.flags.mingce = true;
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'mingce' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [receiver.id, victim.id] });
+      moveCard(ctx, cid, { zone: 'hand', player: receiver.id }, 'mingce');
+      pushFrame(ctx, {
+        type: 'mingce', step: 'wait', source: p.id, receiver: receiver.id, target: victim.id,
+      });
+      return;
+    }
+    case 'xianzhen': {
+      if (!hasSkill(s, p, 'xianzhen')) fail('你没有陷阵技能');
+      if (p.flags.xianzhenUsed) fail('陷阵每回合限一次');
+      const t = requireTarget(ctx, p, targets);
+      if (p.hand.length === 0 || t.hand.length === 0) fail('拼点双方都需要有手牌');
+      p.flags.xianzhenUsed = true;
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, {
+        type: 'tianyi', step: 'start', skill: 'xianzhen', source: p.id, target: t.id,
+      });
       return;
     }
     case 'guhuo': {

@@ -190,6 +190,34 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
       heal(ctx, pid, 1);
     }
   }
+  // 旋风:凌统失去装备区的牌后,可视为出杀或对距离 1 造成伤害。
+  // 插到栈底:当前结算完毕后再询问,避免打断持有栈顶引用的结算帧
+  for (const [pid] of equipLoss) {
+    const p = player(s, pid);
+    if (p.alive && hasSkill(s, p, 'xuanfeng')) {
+      s.stack.unshift({ type: 'xuanfeng', step: 'wait', player: pid });
+    }
+  }
+  // 落英:其他角色的梅花牌因弃置进入弃牌堆时,曹植获得之(简化为自动)
+  if (to.zone === 'discard' && !['play', 'respond', 'recast', 'pindian', 'judge-replaced'].includes(reason ?? '')) {
+    const poet = alivePlayers(s).find((x) => hasSkill(s, x, 'luoying'));
+    if (poet) {
+      const clubs = ids.filter((id) => {
+        const z = from;
+        return card(s, id).suit === 'club'
+          && (z.zone === 'hand' || z.zone === 'equip' || z.zone === 'judge')
+          && z.player !== undefined && z.player !== poet.id;
+      });
+      if (clubs.length > 0) {
+        emit(ctx, { type: 'skillInvoked', player: poet.id, skill: 'luoying' });
+        moveCards(ctx, clubs, { zone: 'hand', player: poet.id }, 'luoying');
+      }
+    }
+  }
+  // 伤逝:手牌减少后检查补牌
+  for (const [pid] of handOwners) {
+    maybeShangshi(ctx, pid);
+  }
 }
 
 // 铁索连环:切换横置状态
@@ -250,16 +278,34 @@ export function pickRandomHand(ctx: Ctx, p: PlayerState): CardId {
 
 // ---------- 体力 ----------
 
-export function heal(ctx: Ctx, pid: PlayerId, n: number): void {
+export function heal(ctx: Ctx, pid: PlayerId, n: number, healer?: PlayerId): void {
   const p = player(ctx.s, pid);
   const next = Math.min(p.maxHp, p.hp + n);
   if (next === p.hp) return;
   const delta = next - p.hp;
   p.hp = next;
   emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta });
+  // 恩怨:其他角色令法正回复体力后,该角色摸一张牌
+  if (healer && healer !== pid && hasSkill(ctx.s, p, 'enyuan')
+      && player(ctx.s, healer).alive) {
+    emit(ctx, { type: 'skillInvoked', player: pid, skill: 'enyuan' });
+    drawCards(ctx, healer, 1);
+  }
   // 不屈:体力回复到 1 以上时弃置创牌
   if (p.hp > 0 && p.buqu && p.buqu.length > 0) {
     moveCards(ctx, [...p.buqu], { zone: 'discard' }, 'buqu');
+  }
+  maybeShangshi(ctx, pid);
+}
+
+// 伤逝:张春华手牌数少于已损失体力值时,将手牌摸至该数(简化为自动)
+export function maybeShangshi(ctx: Ctx, pid: PlayerId): void {
+  const p = player(ctx.s, pid);
+  if (!p.alive || !hasSkill(ctx.s, p, 'shangshi')) return;
+  const x = p.maxHp - p.hp;
+  if (p.hand.length < x) {
+    emit(ctx, { type: 'skillInvoked', player: pid, skill: 'shangshi' });
+    drawCards(ctx, pid, x - p.hand.length);
   }
 }
 
@@ -268,6 +314,7 @@ export function loseHp(ctx: Ctx, pid: PlayerId, n: number): void {
   const p = player(ctx.s, pid);
   p.hp -= n;
   emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta: -n });
+  maybeShangshi(ctx, pid);
   if (p.hp <= 0 && p.alive) {
     pushFrame(ctx, {
       type: 'dying', step: 'ask', who: pid, source: null,
@@ -321,6 +368,15 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
   checkVictory(ctx);
   if (s.winner) return;
 
+  // 挥泪:杀死马谡的角色立即弃置所有牌(此时马谡已死,直接查武将定义)
+  if (killer && GENERALS[dead.general].skills.includes('huilei')) {
+    const k = player(s, killer);
+    if (k.alive) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'huilei' });
+      const cards = [...k.hand, ...equipCardIds(k)];
+      if (cards.length > 0) moveCards(ctx, cards, { zone: 'discard' }, 'huilei');
+    }
+  }
   // 奖惩:任何角色杀死反贼摸三张;主公杀死忠臣弃置所有牌
   if (killer) {
     const k = player(s, killer);
