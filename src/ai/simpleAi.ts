@@ -7,7 +7,9 @@ import type {
 } from '../engine/types';
 import { isBlack, isRed, isShaCard } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
-import { attackRange, distance, kongchengProtected, shaLimit, shaUsed } from '../engine/rules';
+import {
+  attackRange, distance, effectiveSuit, kongchengProtected, shaLimit, shaUsed,
+} from '../engine/rules';
 
 function card(s: GameState, id: CardId) {
   return s.cards[id];
@@ -432,6 +434,24 @@ function decideOption(
     case 'zhuque':
       // 简化:总是转为火杀(可破藤甲、触发连环传导)
       return { kind: 'option', index: 0 };
+    case 'shensu1':
+      // 判定区有延时锦囊时,跳过判定+摸牌换一张杀是划算的
+      return p.judgeZone.length > 0 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    case 'shensu2':
+      // 放弃整个出牌阶段换一张杀通常亏,不发动
+      return { kind: 'decline' };
+    case 'jushou':
+      // 缺牌或残血时摸三张再翻面休整
+      return p.hp <= 2 || p.hand.length <= 1
+        ? { kind: 'option', index: 0 }
+        : { kind: 'decline' };
+    case 'tianxiang': {
+      const heart = p.hand.some((id) => effectiveSuit(s, id, p.id) === 'heart');
+      return heart ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    }
+    case 'guhuo-challenge':
+      // 保守:体力充裕才质疑(猜错真牌要失去 1 点体力)
+      return p.hp >= 4 ? { kind: 'option', index: 0 } : { kind: 'decline' };
     default:
       // 八卦阵 / 奸雄 / 反馈 / 铁骑 / 遗计 / 洛神 / 观星 / 流离:总是发动
       return { kind: 'option', index: 0 };
@@ -477,6 +497,17 @@ function decideChooseCards(
       if (match.length === 0) return { kind: 'decline' };
       return { kind: 'cards', cardIds: [match[0]] };
     }
+    case 'tianxiang': {
+      const hearts = sortByScoreAsc(s, p, p.hand)
+        .filter((id) => effectiveSuit(s, id, p.id) === 'heart');
+      if (hearts.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [hearts[0]] };
+    }
+    case 'shensu-equip': {
+      const equips = Object.values(p.equips).filter((id): id is CardId => id !== undefined);
+      if (equips.length === 0) return { kind: 'decline' };
+      return { kind: 'cards', cardIds: [equips[0]] };
+    }
     default: {
       const sorted = sortByScoreAsc(s, p, p.hand);
       return { kind: 'cards', cardIds: sorted.slice(0, req.min) };
@@ -501,6 +532,23 @@ function decideChoosePlayer(
       const t = enemies[0] ?? cands[0];
       if (!t) return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
       return { kind: 'players', players: [t.id] };
+    }
+    case 'slash': {
+      // 神速的杀:挑最残的敌人
+      const t = enemies.sort((a, b) => a.hp - b.hp)[0];
+      if (t) return { kind: 'players', players: [t.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'leiji': {
+      const t = enemies.sort((a, b) => a.hp - b.hp)[0];
+      if (t) return { kind: 'players', players: [t.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
+    }
+    case 'tianxiang': {
+      // 伤害转移给最残的敌人
+      const t = enemies.sort((a, b) => a.hp - b.hp)[0];
+      if (t) return { kind: 'players', players: [t.id] };
+      return { kind: 'decline' };
     }
     default: {
       if (req.canDecline) return { kind: 'decline' };

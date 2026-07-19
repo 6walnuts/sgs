@@ -23,6 +23,8 @@ export const GENERAL_NAMES: Record<string, string> = {
   zhangfei: '张飞', zhugeliang: '诸葛亮', zhaoyun: '赵云', machao: '马超', huangyueying: '黄月英',
   lvmeng: '吕蒙', huanggai: '黄盖', zhouyu: '周瑜', daqiao: '大乔', luxun: '陆逊',
   sunshangxiang: '孙尚香', lvbu: '吕布',
+  xiahouyuan: '夏侯渊', caoren: '曹仁', huangzhong: '黄忠', weiyan: '魏延',
+  xiaoqiao: '小乔', zhoutai: '周泰', zhangjiao: '张角', yuji: '于吉',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -39,6 +41,9 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   cixiong: '雌雄双股剑', hanbing: '寒冰剑', zhangba: '丈八蛇矛',
   guanshi: '贯石斧', fangtian: '方天画戟', qilin: '麒麟弓', renwang: '仁王盾',
   tengjia: '藤甲', baiyin: '白银狮子', zhuque: '朱雀羽扇', gudingdao: '古锭刀',
+  shensu: '神速', jushou: '据守', liegong: '烈弓', kuanggu: '狂骨',
+  tianxiang: '天香', hongyan: '红颜', buqu: '不屈', leiji: '雷击',
+  guidao: '鬼道', guhuo: '蛊惑',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -54,6 +59,7 @@ export const SKILL_HINTS: Record<string, string> = {
   fanjian: '令一名角色猜花色并随机获得你一张手牌,猜错则受到1点伤害(每回合一次)',
   guose: '将一张方块牌当乐不思蜀使用',
   zhangba: '将两张手牌当杀使用(无花色)',
+  guhuo: '声明一张基本牌或非延时锦囊后扣置一张手牌;若被质疑且为假,牌作废',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -156,12 +162,26 @@ export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): 
       const killer = ev.killer ? `被 ${label(ev.killer)} 杀死,` : '';
       return `${label(ev.player)}(${ROLE_NAMES[ev.role]})${killer}阵亡`;
     }
-    case 'phaseSkipped':
+    case 'phaseSkipped': {
+      const phaseNames: Record<string, string> = {
+        start: '准备', judge: '判定', draw: '摸牌', play: '出牌', discard: '弃牌', end: '结束',
+      };
       return ev.reason === 'lebusishu'
         ? `${label(ev.player)} 被乐不思蜀跳过了出牌阶段`
-        : `${label(ev.player)} 跳过了${ev.phase === 'discard' ? '弃牌' : '出牌'}阶段`;
+        : `${label(ev.player)} 跳过了${phaseNames[ev.phase] ?? ev.phase}阶段`;
+    }
     case 'cardRevealed':
       return `${label(ev.player)} 展示了 ${cardLabel(s, ev.cardId)}`;
+    case 'flipped':
+      return ev.flipped
+        ? `${label(ev.player)} 的武将牌翻面(将跳过一个回合)`
+        : `${label(ev.player)} 的武将牌翻回正面(跳过此回合)`;
+    case 'virtualCard': {
+      const tgt = ev.targets.length > 0 && ev.targets[0] !== ev.player
+        ? ` 对 ${ev.targets.map((t) => label(t)).join('、')}`
+        : '';
+      return `${label(ev.player)}${tgt} 视为使用了 ${CARD_NAMES[ev.as]}`;
+    }
     case 'gameOver':
       return `游戏结束!${ev.winner.map((r) => ROLE_NAMES[r]).join('、')} 阵营获胜`;
   }
@@ -221,6 +241,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           const suit = req.reason.suit ? SUIT_SYMBOLS[req.reason.suit] : '';
           return `火攻:弃置一张 ${suit} 花色手牌,对 ${label(req.reason.target!)} 造成1点火焰伤害`;
         }
+        case 'tianxiang':
+          return '天香:选择一张红桃手牌弃置以转移此伤害';
+        case 'shensu-equip':
+          return '神速:选择一张装备牌弃置';
+        case 'guhuo':
+          return '蛊惑:选择要扣置的手牌';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -244,6 +270,14 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'qilin': return '是否发动【麒麟弓】弃置目标的一匹马?';
         case 'hanbing': return '是否发动【寒冰剑】防止伤害,改为弃置其两张牌?';
         case 'zhuque': return '是否发动【朱雀羽扇】将此杀当作火杀?';
+        case 'shensu1': return '是否发动【神速】跳过判定和摸牌阶段,视为使用一张杀?';
+        case 'shensu2': return '是否发动【神速】跳过出牌阶段并弃置一张装备牌,视为使用一张杀?';
+        case 'jushou': return '是否发动【据守】摸三张牌并翻面?';
+        case 'liegong': return '是否发动【烈弓】令目标不能使用闪?';
+        case 'kuanggu': return '是否发动【狂骨】回复1点体力?';
+        case 'tianxiang': return '是否发动【天香】弃一张红桃手牌转移此伤害?';
+        case 'leiji': return '是否发动【雷击】令一名角色判定?(黑桃则受2点雷伤)';
+        case 'guhuo-challenge': return '是否质疑这次蛊惑?(若为真,你失去1点体力)';
       }
       return '';
     case 'choose-player':
@@ -251,6 +285,7 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'tuxi': return `突袭:选择至多 ${req.max} 名角色,各获得其一张手牌`;
         case 'liuli': return '流离:选择杀的新目标(须在你的攻击范围内)';
         case 'yiji': return '遗计:选择获得这些牌的角色';
+        case 'leiji': return '雷击:选择一名角色进行判定(黑桃则其受到2点雷电伤害)';
         default: return '请选择目标角色';
       }
     case 'arrange-cards':
@@ -284,6 +319,14 @@ export const OPTION_LABELS: Record<string, string> = {
   zhuque: '当作火杀',
   'qilin-plus': '弃置 +1马',
   'qilin-minus': '弃置 -1马',
+  shensu1: '发动神速',
+  shensu2: '发动神速',
+  jushou: '发动据守',
+  liegong: '发动烈弓',
+  kuanggu: '发动狂骨',
+  tianxiang: '发动天香',
+  leiji: '发动雷击',
+  'guhuo-challenge': '质疑',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',

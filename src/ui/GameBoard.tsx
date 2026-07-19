@@ -2,22 +2,40 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
+import type { CardName, GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
-import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
+import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
 
 type ActiveSkill =
   | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
-  | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose' | 'zhangba';
+  | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose' | 'zhangba' | 'guhuo';
+
+// 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
+const GUHUO_NAMES: CardName[] = [
+  'sha', 'huosha', 'leisha', 'tao', 'jiu',
+  'guohe', 'shunshou', 'wuzhong', 'juedou', 'nanman', 'wanjian', 'wugu',
+  'taoyuan', 'jiedao', 'huogong', 'tiesuo',
+];
+
+// 按牌名需要的目标数(蛊惑声明与普通出牌共用)
+function targetsForName(name: CardName): [number, number] {
+  if (['sha', 'huosha', 'leisha'].includes(name)) return [1, 1];
+  if (name === 'jiedao') return [2, 2];
+  if (name === 'tiesuo') return [0, 2]; // 0 = 重铸
+  return ['guohe', 'shunshou', 'juedou', 'lebusishu', 'huogong', 'bingliang'].includes(name)
+    ? [1, 1] : [0, 0];
+}
 
 // 目标数区间 [min, max]
 function targetsNeeded(
   state: GameState, humanId: string, skill: ActiveSkill | null, cardIds: number[],
+  declare: CardName | null,
 ): [number, number] {
+  if (skill === 'guhuo') return declare ? targetsForName(declare) : [0, 0];
   if (skill) {
     switch (skill) {
       case 'lijian': return [2, 2];
@@ -35,11 +53,7 @@ function targetsNeeded(
     const lastHand = p.hand.length === 1 && p.hand[0] === cardIds[0];
     return fangtian && lastHand ? [1, 3] : [1, 1];
   }
-  if (name === 'jiedao') return [2, 2];
-  if (name === 'tiesuo') return [0, 2]; // 0 = 重铸
-  if (['huosha', 'leisha'].includes(name)) return [1, 1];
-  return ['guohe', 'shunshou', 'juedou', 'lebusishu', 'huogong', 'bingliang'].includes(name)
-    ? [1, 1] : [0, 0];
+  return targetsForName(name);
 }
 
 // 技能需要选择的牌数:[最少, 最多]
@@ -85,6 +99,7 @@ export function GameBoard({
   const [selCards, setSelCards] = useState<number[]>([]);
   const [selSkill, setSelSkill] = useState<ActiveSkill | null>(null);
   const [selTargets, setSelTargets] = useState<PlayerId[]>([]);
+  const [selDeclare, setSelDeclare] = useState<CardName | null>(null);
 
   const req = state.pendingRequest;
   const isMyPlay = req?.type === 'play' && req.player === humanId && !state.winner;
@@ -94,6 +109,7 @@ export function GameBoard({
     setSelCards([]);
     setSelSkill(null);
     setSelTargets([]);
+    setSelDeclare(null);
   }, []);
 
   useEffect(() => {
@@ -101,7 +117,7 @@ export function GameBoard({
   }, [req?.id, resetSelection]);
 
   const human = state.players.find((p) => p.id === humanId)!;
-  const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards);
+  const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards, selDeclare);
 
   const toggleCard = (id: number) => {
     if (!isMyPlay) return;
@@ -123,7 +139,10 @@ export function GameBoard({
 
   const confirm = () => {
     if (selSkill) {
-      submit({ kind: 'use-skill', skill: selSkill as SkillName, cardIds: selCards, targets: selTargets });
+      submit({
+        kind: 'use-skill', skill: selSkill as SkillName, cardIds: selCards, targets: selTargets,
+        ...(selSkill === 'guhuo' && selDeclare ? { declare: selDeclare } : {}),
+      });
     } else if (selCards.length === 1) {
       submit({ kind: 'play-card', cardId: selCards[0], targets: selTargets });
     }
@@ -133,6 +152,7 @@ export function GameBoard({
     && (selSkill
       ? selCards.length >= cardsNeeded(selSkill)[0] && selCards.length <= cardsNeeded(selSkill)[1]
       : selCards.length === 1)
+    && (selSkill !== 'guhuo' || selDeclare !== null)
     && selTargets.length >= needMin && selTargets.length <= needMax;
 
   const weaponId = human.equips.weapon;
@@ -239,6 +259,20 @@ export function GameBoard({
               ))}
               {human.hand.length === 0 && <span className="dialog-hint">没有手牌</span>}
             </div>
+            {selSkill === 'guhuo' && (
+              <div className="actions">
+                <span className="dialog-hint">声明:</span>
+                {GUHUO_NAMES.map((n) => (
+                  <button
+                    key={n}
+                    className={selDeclare === n ? 'btn btn-skill btn-skill-on' : 'btn btn-skill'}
+                    onClick={() => { setSelDeclare(n); setSelTargets([]); }}
+                  >
+                    {CARD_NAMES[n]}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="actions">
               {activeSkills.map((sk) => (
                 <button
@@ -250,6 +284,7 @@ export function GameBoard({
                     setSelSkill((cur) => (cur === sk ? null : sk));
                     setSelCards([]);
                     setSelTargets([]);
+                    setSelDeclare(null);
                   }}
                 >
                   {SKILL_NAMES[sk as SkillName]}

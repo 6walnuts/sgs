@@ -87,6 +87,7 @@ export function findZone(s: GameState, id: CardId): ZoneRef {
     if (p.hand.includes(id)) return { zone: 'hand', player: p.id };
     if (equipCardIds(p).includes(id)) return { zone: 'equip', player: p.id };
     if (p.judgeZone.includes(id)) return { zone: 'judge', player: p.id };
+    if (p.buqu?.includes(id)) return { zone: 'buqu', player: p.id };
   }
   if (s.processingZone.includes(id)) return { zone: 'processing' };
   if (s.discardPile.includes(id)) return { zone: 'discard' };
@@ -103,6 +104,7 @@ function removeFrom(s: GameState, id: CardId, from: ZoneRef): void {
   switch (from.zone) {
     case 'hand': pull(player(s, from.player!).hand); break;
     case 'judge': pull(player(s, from.player!).judgeZone); break;
+    case 'buqu': pull(player(s, from.player!).buqu ?? []); break;
     case 'processing': pull(s.processingZone); break;
     case 'discard': pull(s.discardPile); break;
     case 'draw': pull(s.drawPile); break;
@@ -120,6 +122,12 @@ function insertTo(s: GameState, id: CardId, to: ZoneRef): void {
   switch (to.zone) {
     case 'hand': player(s, to.player!).hand.push(id); break;
     case 'judge': player(s, to.player!).judgeZone.push(id); break;
+    case 'buqu': {
+      const p = player(s, to.player!);
+      if (!p.buqu) p.buqu = [];
+      p.buqu.push(id);
+      break;
+    }
     case 'processing': s.processingZone.push(id); break;
     case 'discard': s.discardPile.push(id); break;
     case 'draw': s.drawPile.push(id); break;
@@ -248,6 +256,10 @@ export function heal(ctx: Ctx, pid: PlayerId, n: number): void {
   const delta = next - p.hp;
   p.hp = next;
   emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta });
+  // 不屈:体力回复到 1 以上时弃置创牌
+  if (p.hp > 0 && p.buqu && p.buqu.length > 0) {
+    moveCards(ctx, [...p.buqu], { zone: 'discard' }, 'buqu');
+  }
 }
 
 // 失去体力(非伤害:不触发奸雄/反馈/刚烈/遗计,但会进入濒死)
@@ -292,7 +304,7 @@ export function performDeath(ctx: Ctx, pid: PlayerId, killer: PlayerId | null): 
   dead.roleRevealed = true;
   emit(ctx, { type: 'playerDied', player: pid, role: dead.role, killer });
 
-  const all = [...dead.hand, ...equipCardIds(dead), ...dead.judgeZone];
+  const all = [...dead.hand, ...equipCardIds(dead), ...dead.judgeZone, ...(dead.buqu ?? [])];
   if (all.length > 0) moveCards(ctx, all, { zone: 'discard' }, 'death');
 
   checkVictory(ctx);

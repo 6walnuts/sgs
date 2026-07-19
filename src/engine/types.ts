@@ -37,7 +37,10 @@ export type GeneralId =
   | 'xiahoudun' | 'zhangliao' | 'xuchu' | 'guojia' | 'zhenji'
   | 'zhangfei' | 'zhugeliang' | 'zhaoyun' | 'machao' | 'huangyueying'
   | 'lvmeng' | 'huanggai' | 'zhouyu' | 'daqiao' | 'luxun' | 'sunshangxiang'
-  | 'lvbu';
+  | 'lvbu'
+  // 风包
+  | 'xiahouyuan' | 'caoren' | 'huangzhong' | 'weiyan'
+  | 'xiaoqiao' | 'zhoutai' | 'zhangjiao' | 'yuji';
 
 export type SkillName =
   | 'rende' | 'wusheng' | 'jianxiong' | 'fankui' | 'guicai'
@@ -51,7 +54,10 @@ export type SkillName =
   | 'wushuang'
   // 武器/防具触发(以技能事件形式记录日志)
   | 'cixiong' | 'hanbing' | 'zhangba' | 'guanshi' | 'fangtian' | 'qilin' | 'renwang'
-  | 'tengjia' | 'baiyin' | 'zhuque' | 'gudingdao';
+  | 'tengjia' | 'baiyin' | 'zhuque' | 'gudingdao'
+  // 风包
+  | 'shensu' | 'jushou' | 'liegong' | 'kuanggu'
+  | 'tianxiang' | 'hongyan' | 'buqu' | 'leiji' | 'guidao' | 'guhuo';
 
 export interface PlayerState {
   id: PlayerId;
@@ -65,12 +71,14 @@ export interface PlayerState {
   hand: CardId[];
   equips: Partial<Record<EquipSlot, CardId>>;
   chained?: boolean; // 铁索连环:横置状态,属性伤害解除并传导
+  flipped?: boolean; // 武将牌翻面:回合开始时翻回并跳过该回合
+  buqu?: CardId[];   // 周泰"不屈"的创牌(明置)
   judgeZone: CardId[]; // 延时锦囊,后放置的先结算
   flags: Record<string, number | boolean>; // 回合内计数,回合结束清空
 }
 
 export interface ZoneRef {
-  zone: 'hand' | 'equip' | 'judge' | 'processing' | 'discard' | 'draw';
+  zone: 'hand' | 'equip' | 'judge' | 'buqu' | 'processing' | 'discard' | 'draw';
   player?: PlayerId;
 }
 
@@ -81,6 +89,7 @@ export interface SlashFrame {
   type: 'slash';
   step: 'start' | 'liuli-wait' | 'liuli-cards' | 'liuli-player'
       | 'tieji' | 'tieji-wait' | 'tieji-judged'
+      | 'liegong-wait'
       | 'cixiong' | 'cixiong-wait' | 'cixiong-discard'
       | 'cycle' | 'bagua-wait' | 'bagua-judged' | 'ask-shan' | 'shan-wait'
       | 'dodged' | 'guanshi-wait' | 'guanshi-cards' | 'qinglong-wait'
@@ -88,7 +97,8 @@ export interface SlashFrame {
       | 'zhuque-wait' | 'do-damage' | 'finish';
   source: PlayerId;
   target: PlayerId;
-  cardId: CardId;
+  cardId: CardId | null;   // null = 视为使用的杀(神速),无实体牌
+  lgDone?: boolean;        // 烈弓已询问
   extraCardIds?: CardId[]; // 丈八蛇矛:两张牌当杀,一并进弃牌堆
   noSuit?: boolean;        // 丈八的杀无花色(仁王盾不生效)
   element?: DamageElement; // 火杀/雷杀/朱雀羽扇转化
@@ -110,8 +120,10 @@ export interface SlashFrame {
 
 export interface DamageFrame {
   type: 'damage';
-  step: 'apply' | 'post' | 'jianxiong-wait' | 'fankui-wait' | 'fankui-pick'
+  step: 'pre' | 'tianxiang-wait' | 'tianxiang-card' | 'tianxiang-player'
+      | 'apply' | 'post' | 'jianxiong-wait' | 'fankui-wait' | 'fankui-pick'
       | 'ganglie-wait' | 'ganglie-judged' | 'ganglie-choice' | 'ganglie-discard'
+      | 'kuanggu-wait'
       | 'yiji-wait' | 'yiji-cards' | 'yiji-player';
   source: PlayerId | null;
   target: PlayerId;
@@ -124,6 +136,10 @@ export interface DamageFrame {
   jxAsked?: boolean;
   fkAsked?: boolean;
   glAsked?: boolean;
+  kgAsked?: boolean;       // 狂骨已询问
+  txAsked?: boolean;       // 天香已询问
+  txCard?: CardId;         // 天香弃置的红桃牌
+  txDraw?: boolean;        // 天香转移来的伤害:结算后按已损失体力摸牌
   yijiTimes?: number;      // 遗计剩余触发次数(每点伤害一次)
   yijiDrawn?: CardId[];    // 本次遗计摸到且尚未分配的牌
   yijiPicked?: CardId[];
@@ -143,9 +159,9 @@ export interface JudgeFrame {
   type: 'judge';
   step: 'flip' | 'guicai' | 'guicai-wait';
   player: PlayerId;
-  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang';
+  reason: 'bagua' | 'ganglie' | 'tieji' | 'luoshen' | 'lebusishu' | 'shandian' | 'bingliang' | 'leiji';
   cardId?: CardId;
-  queue?: PlayerId[];
+  queue?: Array<{ pid: PlayerId; skill: 'guicai' | 'guidao' }>;
   idx?: number;
 }
 
@@ -254,6 +270,39 @@ export interface HuogongFrame {
   childResult?: { negated: boolean };
 }
 
+export interface ShensuFrame {
+  type: 'shensu';
+  step: 'wait' | 'equip-wait' | 'target-wait';
+  player: PlayerId;
+  variant: 1 | 2; // 1=跳过判定+摸牌;2=跳过出牌并弃一张装备
+}
+
+export interface LeijiFrame {
+  type: 'leiji';
+  step: 'ask' | 'wait' | 'player-wait' | 'judged';
+  player: PlayerId;
+  target?: PlayerId;
+  childResult?: { cardId: CardId };
+}
+
+export interface GuhuoFrame {
+  type: 'guhuo';
+  step: 'next' | 'challenge-wait' | 'resolve';
+  player: PlayerId;
+  cardId: CardId;
+  declared: CardName;
+  targets: PlayerId[];
+  queue: PlayerId[];
+  idx: number;
+  challenger?: PlayerId;
+}
+
+export interface JushouFrame {
+  type: 'jushou';
+  step: 'wait';
+  player: PlayerId;
+}
+
 export interface TiesuoFrame {
   type: 'tiesuo';
   step: 'next' | 'after-wuxie';
@@ -269,7 +318,8 @@ export type EffectFrame =
   | WuxieFrame | TrickFrame | DuelFrame
   | GuanxingFrame | LuoshenFrame | DrawStepFrame | DelayedFrame
   | KurouFrame | FanjianFrame | AoeFrame | JiedaoFrame
-  | HuogongFrame | TiesuoFrame;
+  | HuogongFrame | TiesuoFrame
+  | ShensuFrame | LeijiFrame | GuhuoFrame | JushouFrame;
 
 // ---------- 请求-响应 ----------
 
@@ -277,7 +327,8 @@ export interface RequestReason {
   kind: 'slash' | 'duel' | 'qinglong' | 'dying' | 'nullify' | 'discard' | 'guicai'
       | 'liuli' | 'ganglie-discard' | 'yiji' | 'tuxi'
       | 'aoe' | 'jiedao' | 'wugu' | 'guanshi-discard' | 'cixiong-discard'
-      | 'huogong-show' | 'huogong-match';
+      | 'huogong-show' | 'huogong-match'
+      | 'tianxiang' | 'shensu-equip' | 'leiji' | 'guhuo';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -290,7 +341,9 @@ export type OptionReason =
   | 'bagua' | 'jianxiong' | 'fankui'
   | 'liuli' | 'tieji' | 'ganglie' | 'ganglie-choice'
   | 'yiji' | 'luoshen' | 'guanxing' | 'tuxi' | 'luoyi' | 'fanjian-suit'
-  | 'cixiong-choice' | 'guanshi' | 'qilin' | 'hanbing' | 'zhuque';
+  | 'cixiong-choice' | 'guanshi' | 'qilin' | 'hanbing' | 'zhuque'
+  | 'shensu1' | 'shensu2' | 'jushou' | 'liegong' | 'kuanggu'
+  | 'tianxiang' | 'leiji' | 'guhuo-challenge';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }
@@ -315,7 +368,8 @@ export type PendingRequest =
 
 export type ResponseData =
   | { kind: 'play-card'; cardId: CardId; targets: PlayerId[] }
-  | { kind: 'use-skill'; skill: SkillName; cardIds?: CardId[]; targets?: PlayerId[] }
+  | { kind: 'use-skill'; skill: SkillName; cardIds?: CardId[]; targets?: PlayerId[];
+      declare?: CardName } // 蛊惑声明的牌名
   | { kind: 'end-phase' }
   | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jijiu' | 'longdan' | 'qingguo' }
   | { kind: 'cards'; cardIds: CardId[] }                          // 应答 choose-cards
@@ -342,6 +396,8 @@ export type GameEvent =
   | { type: 'cardsMoved'; cardIds: CardId[]; from: ZoneRef; to: ZoneRef; reason?: string }
   | { type: 'damage'; source: PlayerId | null; target: PlayerId; amount: number; element?: DamageElement }
   | { type: 'chained'; player: PlayerId; chained: boolean }
+  | { type: 'flipped'; player: PlayerId; flipped: boolean }
+  | { type: 'virtualCard'; player: PlayerId; as: CardName; targets: PlayerId[] }
   | { type: 'hpChanged'; player: PlayerId; hp: number; delta: number }
   | { type: 'judge'; player: PlayerId; cardId: CardId; reason: string }
   | { type: 'skillInvoked'; player: PlayerId; skill: SkillName }

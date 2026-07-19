@@ -40,6 +40,15 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   sunshangxiang: { id: 'sunshangxiang', faction: 'wu', hp: 3, gender: 'f', skills: ['jieyin', 'xiaoji'], activeSkills: ['jieyin'] },
   // 标准包 · 群
   lvbu: { id: 'lvbu', faction: 'qun', hp: 4, gender: 'm', skills: ['wushuang'], activeSkills: [] },
+  // 风包
+  xiahouyuan: { id: 'xiahouyuan', faction: 'wei', hp: 4, gender: 'm', skills: ['shensu'], activeSkills: [] },
+  caoren:     { id: 'caoren',     faction: 'wei', hp: 4, gender: 'm', skills: ['jushou'], activeSkills: [] },
+  huangzhong: { id: 'huangzhong', faction: 'shu', hp: 4, gender: 'm', skills: ['liegong'], activeSkills: [] },
+  weiyan:     { id: 'weiyan',     faction: 'shu', hp: 4, gender: 'm', skills: ['kuanggu'], activeSkills: [] },
+  xiaoqiao:   { id: 'xiaoqiao',   faction: 'wu',  hp: 3, gender: 'f', skills: ['tianxiang', 'hongyan'], activeSkills: [] },
+  zhoutai:    { id: 'zhoutai',    faction: 'wu',  hp: 4, gender: 'm', skills: ['buqu'], activeSkills: [] },
+  zhangjiao:  { id: 'zhangjiao',  faction: 'qun', hp: 3, gender: 'm', skills: ['leiji', 'guidao'], activeSkills: [] },
+  yuji:       { id: 'yuji',       faction: 'qun', hp: 3, gender: 'm', skills: ['guhuo'], activeSkills: ['guhuo'] },
 };
 
 export const ALL_GENERAL_IDS = Object.keys(GENERALS) as GeneralId[];

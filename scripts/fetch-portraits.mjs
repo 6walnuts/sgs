@@ -39,6 +39,14 @@ const GENERALS = [
   { id: 'luxun', name: '陆逊', candidates: ['Lu Xun Qing illustration.jpg'], search: 'Lu Xun Three Kingdoms illustration' },
   { id: 'sunshangxiang', name: '孙尚香', candidates: ['Sun Shangxiang Qing illustration.jpg'], search: 'Sun Shangxiang illustration Romance of the Three Kingdoms' },
   { id: 'lvbu', name: '吕布', candidates: ['Lu Bu Qing illustration.jpg'], search: 'Lu Bu illustration Romance of the Three Kingdoms' },
+  { id: 'xiahouyuan', name: '夏侯渊', candidates: ['Xiahou Yuan Qing illustration.jpg'], search: 'Xiahou Yuan illustration Romance of the Three Kingdoms' },
+  { id: 'caoren', name: '曹仁', candidates: ['Cao Ren Qing illustration.jpg'], search: 'Cao Ren illustration Romance of the Three Kingdoms' },
+  { id: 'huangzhong', name: '黄忠', candidates: ['Huang Zhong Qing illustration.jpg'], search: 'Huang Zhong illustration Romance of the Three Kingdoms' },
+  { id: 'weiyan', name: '魏延', candidates: ['Wei Yan Qing illustration.jpg'], search: 'Wei Yan illustration Romance of the Three Kingdoms' },
+  { id: 'xiaoqiao', name: '小乔', candidates: [], search: 'Xiao Qiao illustration Qing dynasty' },
+  { id: 'zhoutai', name: '周泰', candidates: ['Zhou Tai Qing illustration.jpg'], search: 'Zhou Tai illustration Romance of the Three Kingdoms' },
+  { id: 'zhangjiao', name: '张角', candidates: ['Zhang Jiao Qing illustration.jpg'], search: 'Zhang Jiao Yellow Turban illustration' },
+  { id: 'yuji', name: '于吉', candidates: [], search: 'Yu Ji Taoist Three Kingdoms illustration' },
 ];
 
 const PD_PATTERN = /public\s*domain|^pd\b|pd-|cc0/i;

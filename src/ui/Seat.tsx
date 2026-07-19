@@ -57,7 +57,8 @@ export function Seat({
           <div className="seat-info">
             <span>手牌 {p.hand.length}</span>
             {p.chained && <span className="chain-tag">连环</span>}
-        {!p.alive && <span className="dead-tag">阵亡</span>}
+            {p.flipped && <span className="chain-tag">翻面</span>}
+            {!p.alive && <span className="dead-tag">阵亡</span>}
             {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
           </div>
         </div>
@@ -79,6 +80,14 @@ export function Seat({
       {p.judgeZone.length > 0 && (
         <div className="seat-equips seat-judges">
           {p.judgeZone.map((id) => (
+            <CardChip key={id} state={state} cardId={id} small />
+          ))}
+        </div>
+      )}
+      {(p.buqu?.length ?? 0) > 0 && (
+        <div className="seat-equips seat-judges">
+          <span className="skill-tag">不屈</span>
+          {p.buqu!.map((id) => (
             <CardChip key={id} state={state} cardId={id} small />
           ))}
         </div>

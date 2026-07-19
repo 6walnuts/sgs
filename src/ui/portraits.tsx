@@ -240,6 +240,15 @@ const PORTRAITS: Record<GeneralId, () => ReactNode> = {
   luxun: () => Generic({ skin: '#ecd6b0', robe: '#3f8a5a', trim: '#e8e2d0', hat: 'scholar', hatColor: '#1e3d26', beard: 'none' }),
   sunshangxiang: () => Generic({ skin: '#f2d8ba', robe: '#c04a4a', trim: '#d8b84a', female: true, fierce: true }),
   lvbu: () => Generic({ skin: '#d9a877', robe: '#4c4456', trim: '#d8b84a', hat: 'helmet', hatColor: '#3a3440', beard: 'short', fierce: true, extra: 'plume' }),
+  // 风包
+  xiahouyuan: () => Generic({ skin: '#dcae7e', robe: '#2f4a6b', trim: '#cfd8e3', hat: 'helmet', hatColor: '#31465f', beard: 'stubble', fierce: true, extra: 'feather' }),
+  caoren: () => Generic({ skin: '#d9a877', robe: '#3a5170', trim: '#8a94a0', hat: 'helmet', hatColor: '#26374d', beard: 'short' }),
+  huangzhong: () => Generic({ skin: '#d9a877', robe: '#8a4536', trim: '#d8b84a', hat: 'ribbon', hatColor: '#6b5638', beard: 'full', beardColor: '#e8e4da', old: true, fierce: true }),
+  weiyan: () => Generic({ skin: '#c98a55', robe: '#7a3a30', trim: '#caa14a', hat: 'helmet', hatColor: '#5c2b24', beard: 'stubble', fierce: true, extra: 'scar' }),
+  xiaoqiao: () => Generic({ skin: '#f8e3cc', robe: '#e0949e', trim: '#f8ecd8', female: true }),
+  zhoutai: () => Generic({ skin: '#dcae7e', robe: '#3f6b50', trim: '#d8b84a', hat: 'ribbon', hatColor: '#2c4a38', beard: 'stubble', fierce: true, extra: 'scar' }),
+  zhangjiao: () => Generic({ skin: '#e0c39a', robe: '#8a7a3a', trim: '#e8dc9a', hat: 'scarf', hatColor: '#caa14a', beard: 'goatee', old: true }),
+  yuji: () => Generic({ skin: '#ecd6b0', robe: '#5c6b7a', trim: '#d5dde3', hat: 'scholar', hatColor: '#43505c', beard: 'goatee', beardColor: '#cfcabb', old: true }),
   liubei: () => (
     <>
       <Face skin="#eac49c" neck="#d8ab7f" />

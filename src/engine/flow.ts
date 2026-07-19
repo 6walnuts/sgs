@@ -1,18 +1,23 @@
 // 回合流程与出牌阶段的响应处理。栈为空时 advance 调用 flowRun 推进阶段;
 // 栈为空时产生的请求(play / 弃牌 choose-cards)由 flowOnResponse 处理。
 
-import type { PendingRequest, Phase, PlayerId, PlayerState, ResponseData } from './types';
+import type {
+  CardName, DamageElement, PendingRequest, Phase, PlayerId, PlayerState, ResponseData,
+} from './types';
 import {
   ask, card, drawCards, emit, equipCardIds, fail, flipToProcessing, hasSkill,
   heal, loseHp, markShaUsage, moveCard, moveCards, orderFrom, player, pushFrame,
 } from './kernel';
 import type { Ctx } from './kernel';
-import { equipSlotOf, isBlack, isRed } from './deck';
+import { equipSlotOf, isBlack, isRed, shaElement } from './deck';
 import {
   assertInHand, attackRange, distance, kongchengProtected, shaLimit, shaUsed,
 } from './rules';
-import { pushTrick } from './frames';
+import { pushTrick, registerPlayAs } from './frames';
 import { GENERALS } from './generals';
+
+// 蛊惑结算时按声明的牌名走正常出牌逻辑(frames 与 flow 互相依赖,用注入解环)
+registerPlayAs((ctx, p, cardId, asName, targets) => playAs(ctx, p, cardId, asName, targets));
 
 function setPhase(ctx: Ctx, phase: Phase): void {
   ctx.s.turn.phase = phase;
@@ -25,14 +30,19 @@ export function nextTurn(ctx: Ctx): void {
   cur.flags = {};
   const n = s.players.length;
   let seat = cur.seat;
-  for (let i = 0; i < n; i++) {
+  // 翻面的角色轮到时翻回并跳过该回合;两圈保证全员翻面时也能找到下一个行动者
+  for (let i = 0; i < 2 * n; i++) {
     seat = (seat + 1) % n;
     const next = s.players.find((p) => p.seat === seat)!;
-    if (next.alive) {
-      s.turn = { activePlayer: next.id, phase: 'start', turnNumber: s.turn.turnNumber + 1 };
-      emit(ctx, { type: 'turnStarted', player: next.id, turnNumber: s.turn.turnNumber });
-      return;
+    if (!next.alive) continue;
+    if (next.flipped) {
+      next.flipped = false;
+      emit(ctx, { type: 'flipped', player: next.id, flipped: false });
+      continue;
     }
+    s.turn = { activePlayer: next.id, phase: 'start', turnNumber: s.turn.turnNumber + 1 };
+    emit(ctx, { type: 'turnStarted', player: next.id, turnNumber: s.turn.turnNumber });
+    return;
   }
   fail('没有存活玩家');
 }
@@ -55,9 +65,17 @@ export function flowRun(ctx: Ctx): void {
       setPhase(ctx, 'judge');
       return;
     case 'judge':
+      // 神速①:跳过判定阶段和摸牌阶段,视为使用一张杀
+      if (!p.flags._shensu1 && hasSkill(s, p, 'shensu')) {
+        p.flags._shensu1 = true;
+        pushFrame(ctx, { type: 'shensu', step: 'wait', player: p.id, variant: 1 });
+        return;
+      }
       if (!p.flags._judge) {
         p.flags._judge = true;
-        if (p.judgeZone.length > 0) {
+        if (p.flags.skipJudge) {
+          emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'judge', reason: 'shensu' });
+        } else if (p.judgeZone.length > 0) {
           pushFrame(ctx, {
             type: 'delayed', step: 'next', who: p.id,
             queue: [...p.judgeZone].reverse(), // 后放置的先结算
@@ -71,7 +89,10 @@ export function flowRun(ctx: Ctx): void {
       if (!p.flags._draw) {
         p.flags._draw = true;
         if (p.flags.skipDraw) {
-          emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'draw', reason: 'bingliang' });
+          emit(ctx, {
+            type: 'phaseSkipped', player: p.id, phase: 'draw',
+            reason: p.flags.skipJudge ? 'shensu' : 'bingliang',
+          });
         } else if (hasSkill(s, p, 'tuxi') || hasSkill(s, p, 'luoyi')) {
           pushFrame(ctx, { type: 'draw-step', step: 'ask', player: p.id });
         } else {
@@ -90,6 +111,13 @@ export function flowRun(ctx: Ctx): void {
       if (p.flags.skipPlay && !p.flags.playEnded) {
         emit(ctx, { type: 'phaseSkipped', player: p.id, phase: 'play', reason: 'lebusishu' });
         p.flags.playEnded = true;
+      }
+      // 神速②:跳过出牌阶段并弃置一张装备牌,视为使用一张杀
+      if (!p.flags._shensu2 && !p.flags.playEnded
+          && hasSkill(s, p, 'shensu') && equipCardIds(p).length > 0) {
+        p.flags._shensu2 = true;
+        pushFrame(ctx, { type: 'shensu', step: 'wait', player: p.id, variant: 2 });
+        return;
       }
       if (p.flags.playEnded) { setPhase(ctx, 'discard'); return; }
       ask(ctx, { player: p.id, type: 'play' });
@@ -113,6 +141,14 @@ export function flowRun(ctx: Ctx): void {
       return;
     }
     case 'end':
+      // 据守:结束阶段可摸三张牌并翻面
+      if (!p.flags._end) {
+        p.flags._end = true;
+        if (hasSkill(s, p, 'jushou')) {
+          pushFrame(ctx, { type: 'jushou', step: 'wait', player: p.id });
+          return;
+        }
+      }
       if (hasSkill(s, p, 'biyue')) {
         emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'biyue' });
         drawCards(ctx, p.id, 1);
@@ -158,7 +194,7 @@ function handlePlay(ctx: Ctx, pid: PlayerId, resp: ResponseData): void {
       playCard(ctx, p, resp.cardId, resp.targets ?? []);
       return;
     case 'use-skill':
-      useSkill(ctx, p, resp.skill, resp.cardIds ?? [], resp.targets ?? []);
+      useSkill(ctx, p, resp.skill, resp.cardIds ?? [], resp.targets ?? [], resp.declare);
       return;
     default:
       fail('出牌阶段只能出牌、发动技能或结束出牌');
@@ -186,10 +222,14 @@ function stealableCount(t: PlayerState): number {
 }
 
 function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[]): void {
+  assertInHand(ctx.s, p, cardId);
+  playAs(ctx, p, cardId, card(ctx.s, cardId).name, targets);
+}
+
+// 按 name 指定的牌名结算(蛊惑声明的牌名可能与实体牌不同;供 frames 注入调用)
+function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, targets: PlayerId[]): void {
   const s = ctx.s;
-  assertInHand(s, p, cardId);
-  const c = card(s, cardId);
-  const slot = equipSlotOf(c.name);
+  const slot = equipSlotOf(name);
   if (slot) {
     const old = p.equips[slot];
     if (old !== undefined) moveCard(ctx, old, { zone: 'discard' }, 'replace-equip');
@@ -197,11 +237,11 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
     emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: [p.id] });
     return;
   }
-  switch (c.name) {
+  switch (name) {
     case 'sha':
     case 'huosha':
     case 'leisha': {
-      startSlash(ctx, p, cardId, targets, undefined);
+      startSlash(ctx, p, cardId, targets, undefined, [], shaElement(name));
       return;
     }
     case 'jiu': {
@@ -325,7 +365,7 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
       moveCard(ctx, cardId, { zone: 'processing' }, 'play');
       emit(ctx, { type: 'cardPlayed', player: p.id, cardId, targets: queue });
       pushFrame(ctx, {
-        type: 'aoe', step: 'next', effName: c.name, cardId, source: p.id, queue, idx: 0,
+        type: 'aoe', step: 'next', effName: name, cardId, source: p.id, queue, idx: 0,
       });
       afterTrickUse(ctx, p);
       return;
@@ -375,7 +415,7 @@ function playCard(ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[])
       return;
     }
     default:
-      fail(`无法使用 ${c.name}`);
+      fail(`无法使用 ${name}`);
   }
 }
 
@@ -393,6 +433,7 @@ function startSlash(
   ctx: Ctx, p: PlayerState, cardId: number, targets: PlayerId[],
   via: 'wusheng' | 'longdan' | 'zhangba' | undefined,
   extraCardIds: number[] = [],
+  element?: DamageElement,
 ): void {
   const s = ctx.s;
   if (targets.length === 0) fail('需要选择目标');
@@ -429,12 +470,21 @@ function startSlash(
       extraCardIds: extraCardIds.length > 0 ? [...extraCardIds] : undefined,
       noSuit: via === 'zhangba' ? true : undefined,
       jiuBonus: jiuBonus ? true : undefined,
+      element,
     });
   }
 }
 
+// 蛊惑可声明的牌名:基本牌(闪/无懈只能响应时用,不可声明)与非延时锦囊
+const GUHUO_DECLARABLE: CardName[] = [
+  'sha', 'huosha', 'leisha', 'tao', 'jiu',
+  'guohe', 'shunshou', 'wuzhong', 'juedou', 'nanman', 'wanjian', 'wugu',
+  'taoyuan', 'jiedao', 'huogong', 'tiesuo',
+];
+
 function useSkill(
   ctx: Ctx, p: PlayerState, skill: string, cardIds: number[], targets: PlayerId[],
+  declare?: CardName,
 ): void {
   const s = ctx.s;
   switch (skill) {
@@ -582,6 +632,23 @@ function useSkill(
       ask(ctx, {
         player: t.id, type: 'choose-option',
         options: ['spade', 'heart', 'club', 'diamond'], canDecline: false, reason: 'fanjian-suit',
+      });
+      return;
+    }
+    case 'guhuo': {
+      if (!hasSkill(s, p, 'guhuo')) fail('你没有蛊惑技能');
+      if (!declare || !GUHUO_DECLARABLE.includes(declare)) {
+        fail('蛊惑需要声明一种基本牌或非延时锦囊');
+      }
+      if (cardIds.length !== 1) fail('蛊惑需要扣置一张手牌');
+      assertInHand(s, p, cardIds[0]);
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'guhuo' });
+      emit(ctx, { type: 'virtualCard', player: p.id, as: declare, targets });
+      // 牌暂留手中(扣置,不公开);质疑流程结束后翻开,按声明结算或作废
+      pushFrame(ctx, {
+        type: 'guhuo', step: 'next', player: p.id, cardId: cardIds[0],
+        declared: declare, targets: [...targets],
+        queue: orderFrom(s).filter((pid) => pid !== p.id), idx: 0,
       });
       return;
     }
