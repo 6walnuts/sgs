@@ -2,6 +2,7 @@ import type { GameState, PlayerId } from '../engine/types';
 import { GENERAL_NAMES, ROLE_NAMES, SKILL_NAMES } from './text';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
+import { GeneralPortrait } from './portraits';
 
 export function Seat({
   state, pid, humanId, targetable, targeted, onTarget, onEquipClick, selectedCards,
@@ -39,20 +40,25 @@ export function Seat({
           {roleVisible ? ROLE_NAMES[p.role] : '?'}
         </span>
       </div>
-      <div className="seat-skills">
-        {GENERALS[p.general].skills.map((sk) => (
-          <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
-        ))}
-      </div>
-      <div className="seat-hp">
-        {Array.from({ length: p.maxHp }, (_, i) => (
-          <span key={i} className={i < p.hp ? 'hp-full' : 'hp-empty'}>❤</span>
-        ))}
-      </div>
-      <div className="seat-info">
-        <span>手牌 {p.hand.length}</span>
-        {!p.alive && <span className="dead-tag">阵亡</span>}
-        {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
+      <div className="seat-body">
+        <GeneralPortrait general={p.general} />
+        <div className="seat-col">
+          <div className="seat-skills">
+            {GENERALS[p.general].skills.map((sk) => (
+              <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
+            ))}
+          </div>
+          <div className="seat-hp">
+            {Array.from({ length: p.maxHp }, (_, i) => (
+              <span key={i} className={i < p.hp ? 'hp-full' : 'hp-empty'}>❤</span>
+            ))}
+          </div>
+          <div className="seat-info">
+            <span>手牌 {p.hand.length}</span>
+            {!p.alive && <span className="dead-tag">阵亡</span>}
+            {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
+          </div>
+        </div>
       </div>
       {equips.length > 0 && (
         <div className="seat-equips">
