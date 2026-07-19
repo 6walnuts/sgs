@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "server": "tsx src/server/main.ts"
+    "server": "tsx src/server/main.ts",
+    "portraits": "node scripts/fetch-portraits.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
