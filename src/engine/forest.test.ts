@@ -172,6 +172,30 @@ describe('鲁肃·好施/缔盟', () => {
   });
 });
 
+describe('孙坚·英魂', () => {
+  it('准备阶段已受伤:令一名其他角色摸X弃一或摸一弃X', () => {
+    let s = newGame();
+    clearHands(s);
+    setGeneral(s, 'p1', 'sunjian');
+    rigPlay(s, 'p0');
+    P(s, 'p1').maxHp = 4;
+    P(s, 'p1').hp = 2; // X = 2
+    s = act(s, { kind: 'end-phase' });
+    expect(s.pendingRequest).toMatchObject({ player: 'p1', type: 'choose-player', reason: { kind: 'yinghun' } });
+    s = act(s, { kind: 'players', players: ['p2'] });
+    expect(s.pendingRequest).toMatchObject({ player: 'p1', type: 'choose-option', reason: 'yinghun' });
+    s = act(s, { kind: 'option', index: 0 }); // 摸X弃一
+    expect(P(s, 'p2').hand).toHaveLength(2);  // 摸了 2
+    expect(s.pendingRequest).toMatchObject({ player: 'p2', type: 'choose-cards', reason: { kind: 'yinghun' } });
+    const discard = P(s, 'p2').hand[0];
+    s = act(s, { kind: 'cards', cardIds: [discard] });
+    expect(P(s, 'p2').hand).toHaveLength(1);
+    expect(s.discardPile).toContain(discard);
+    // 继续 p1 的回合(摸牌 → 出牌)
+    expect(s.pendingRequest).toMatchObject({ player: 'p1', type: 'play' });
+  });
+});
+
 describe('董卓·酒池/肉林/崩坏', () => {
   it('酒池:黑桃手牌当酒;肉林:对女性使用杀需两张闪', () => {
     let s = newGame();

@@ -60,6 +60,7 @@ const GENERALS = [
   { id: 'menghuo', name: '孟获', candidates: ['Meng Huo Qing illustration.jpg'], search: 'Meng Huo illustration Romance of the Three Kingdoms' },
   { id: 'zhurong', name: '祝融', candidates: [], search: 'Lady Zhurong illustration Romance of the Three Kingdoms' },
   { id: 'lusu', name: '鲁肃', candidates: ['Lu Su Qing illustration.jpg'], search: 'Lu Su illustration Romance of the Three Kingdoms' },
+  { id: 'sunjian', name: '孙坚', candidates: ['Sun Jian Qing illustration.jpg'], search: 'Sun Jian illustration Romance of the Three Kingdoms' },
   { id: 'dongzhuo', name: '董卓', candidates: ['Dong Zhuo Qing illustration.jpg'], search: 'Dong Zhuo illustration Romance of the Three Kingdoms' },
   { id: 'jiaxu', name: '贾诩', candidates: ['Jia Xu Qing illustration.jpg'], search: 'Jia Xu illustration Romance of the Three Kingdoms' },
 ];

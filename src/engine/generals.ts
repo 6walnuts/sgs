@@ -64,6 +64,7 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   menghuo:  { id: 'menghuo',  faction: 'shu', hp: 4, gender: 'm', skills: ['huoshou', 'zaiqi'], activeSkills: [] },
   zhurong:  { id: 'zhurong',  faction: 'shu', hp: 4, gender: 'f', skills: ['juxiang', 'lieren'], activeSkills: [] },
   lusu:     { id: 'lusu',     faction: 'wu',  hp: 3, gender: 'm', skills: ['haoshi', 'dimeng'], activeSkills: ['dimeng'] },
+  sunjian:  { id: 'sunjian',  faction: 'wu',  hp: 4, gender: 'm', skills: ['yinghun'], activeSkills: [] },
   dongzhuo: { id: 'dongzhuo', faction: 'qun', hp: 8, gender: 'm', skills: ['jiuchi', 'roulin', 'benghuai', 'baonve'], activeSkills: ['jiuchi'] },
   jiaxu:    { id: 'jiaxu',    faction: 'qun', hp: 3, gender: 'm', skills: ['wansha', 'luanwu', 'weimu'], activeSkills: ['luanwu'] },
 };

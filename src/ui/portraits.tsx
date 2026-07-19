@@ -265,6 +265,7 @@ const PORTRAITS: Record<GeneralId, () => ReactNode> = {
   menghuo: () => Generic({ skin: '#b57a48', robe: '#6b4a2a', trim: '#caa14a', hat: 'ribbon', hatColor: '#4a3320', beard: 'full', fierce: true }),
   zhurong: () => Generic({ skin: '#d9a068', robe: '#a5443a', trim: '#e8b84a', female: true, fierce: true }),
   lusu: () => Generic({ skin: '#ecd6b0', robe: '#3f8a5a', trim: '#e8e2d0', hat: 'scholar', hatColor: '#1e3d26', beard: 'goatee' }),
+  sunjian: () => Generic({ skin: '#dcae7e', robe: '#a5443a', trim: '#d8b84a', hat: 'helmet', hatColor: '#7a2f28', beard: 'short', fierce: true, extra: 'plume' }),
   dongzhuo: () => Generic({ skin: '#cf9663', robe: '#4c4456', trim: '#caa14a', hat: 'circlet', beard: 'full', fierce: true }),
   jiaxu: () => Generic({ skin: '#e0c39a', robe: '#5c6b7a', trim: '#8a94a0', hat: 'scholar', hatColor: '#3a4550', beard: 'goatee' }),
   liubei: () => (

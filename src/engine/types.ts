@@ -46,7 +46,7 @@ export type GeneralId =
   | 'taishici' | 'pangde' | 'yanliangwenchou' | 'yuanshao'
   // 林包
   | 'caopi' | 'xuhuang' | 'menghuo' | 'zhurong'
-  | 'lusu' | 'dongzhuo' | 'jiaxu';
+  | 'lusu' | 'sunjian' | 'dongzhuo' | 'jiaxu';
 
 export type SkillName =
   | 'rende' | 'wusheng' | 'jianxiong' | 'fankui' | 'guicai'
@@ -70,7 +70,7 @@ export type SkillName =
   | 'xingshang' | 'fangzhu' | 'songwei' | 'duanliang'
   | 'huoshou' | 'zaiqi' | 'juxiang' | 'lieren'
   | 'haoshi' | 'dimeng' | 'jiuchi' | 'roulin' | 'benghuai' | 'baonve'
-  | 'wansha' | 'luanwu' | 'weimu';
+  | 'wansha' | 'luanwu' | 'weimu' | 'yinghun';
 
 export interface PlayerState {
   id: PlayerId;
@@ -359,6 +359,15 @@ export interface TianyiFrame {
   childResult?: { won: boolean };
 }
 
+// 英魂(孙坚):准备阶段若已受伤,令一名其他角色摸X弃一或摸一弃X
+export interface YinghunFrame {
+  type: 'yinghun';
+  step: 'start' | 'target-wait' | 'mode-wait' | 'discard-wait';
+  player: PlayerId;
+  target?: PlayerId;
+  need?: number; // 待弃置张数
+}
+
 // 烈刃(祝融):杀造成伤害后拼点,赢则获得目标一张牌
 export interface LierenFrame {
   type: 'lieren';
@@ -412,7 +421,7 @@ export type EffectFrame =
   | HuogongFrame | TiesuoFrame
   | ShensuFrame | LeijiFrame | GuhuoFrame | JushouFrame
   | PindianFrame | QuhuFrame | TianyiFrame
-  | LierenFrame | BenghuaiFrame | LuanwuFrame
+  | LierenFrame | BenghuaiFrame | LuanwuFrame | YinghunFrame
   | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
@@ -424,7 +433,7 @@ export interface RequestReason {
       | 'huogong-show' | 'huogong-match'
       | 'tianxiang' | 'shensu-equip' | 'leiji' | 'guhuo'
       | 'pindian' | 'jieming' | 'quhu'
-      | 'fangzhu' | 'haoshi' | 'luanwu';
+      | 'fangzhu' | 'haoshi' | 'luanwu' | 'yinghun';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -441,7 +450,7 @@ export type OptionReason =
   | 'shensu1' | 'shensu2' | 'jushou' | 'liegong' | 'kuanggu'
   | 'tianxiang' | 'leiji' | 'guhuo-challenge'
   | 'mengjin' | 'shuangxiong' | 'niepan'
-  | 'fangzhu' | 'zaiqi' | 'haoshi' | 'lieren' | 'baonve' | 'benghuai';
+  | 'fangzhu' | 'zaiqi' | 'haoshi' | 'lieren' | 'baonve' | 'benghuai' | 'yinghun';
 
 export type PendingRequest =
   | { id: number; player: PlayerId; type: 'play' }

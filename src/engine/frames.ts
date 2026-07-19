@@ -9,7 +9,7 @@ import type {
   JudgeFrame, JushouFrame, KurouFrame, LeijiFrame, LierenFrame, LuanwuFrame,
   LuoshenFrame, PendingRequest, PindianFrame, PlayerId, QuhuFrame,
   ResponseData, ShensuFrame, SlashFrame, TianyiFrame, TiesuoFrame, TrickFrame,
-  WuxieFrame,
+  WuxieFrame, YinghunFrame,
 } from './types';
 import {
   EngineError, alivePlayers, ask, card, drawCards, emit, equipCardIds, fail,
@@ -2489,6 +2489,91 @@ const tianyi: FrameHandler<TianyiFrame> = {
   },
 };
 
+// ---------- 英魂(孙坚) ----------
+
+const yinghun: FrameHandler<YinghunFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    if (f.step !== 'start') fail(`yinghun 帧在 ${f.step} 步不应被 run`);
+    const cands = alivePlayers(s).filter((x) => x.id !== f.player).map((x) => x.id);
+    if (cands.length === 0) { popFrame(ctx, f); return; }
+    ask(ctx, {
+      player: f.player, type: 'choose-player', min: 1, max: 1,
+      candidates: cands, canDecline: true, reason: { kind: 'yinghun' },
+    });
+    f.step = 'target-wait';
+  },
+  onResponse(ctx, f, resp) {
+    const s = ctx.s;
+    const me = player(s, f.player);
+    const x = me.maxHp - me.hp;
+    switch (f.step) {
+      case 'target-wait': {
+        const r = expectDeclineOr(resp, 'players');
+        if (!r) { popFrame(ctx, f); return; }
+        if (r.players.length !== 1 || r.players[0] === f.player
+            || !player(s, r.players[0]).alive) {
+          fail('英魂的目标不合法');
+        }
+        f.target = r.players[0];
+        if (x <= 1) {
+          // X=1 时两种选择等价:摸一弃一
+          emit(ctx, { type: 'skillInvoked', player: f.player, skill: 'yinghun' });
+          drawCards(ctx, f.target, 1);
+          f.need = 1;
+          askYinghunDiscard(ctx, f);
+          return;
+        }
+        ask(ctx, {
+          player: f.player, type: 'choose-option',
+          options: ['yinghun-a', 'yinghun-b'], canDecline: false, reason: 'yinghun',
+        });
+        f.step = 'mode-wait';
+        return;
+      }
+      case 'mode-wait': {
+        if (resp.kind !== 'option') fail('英魂需要选择一项');
+        emit(ctx, { type: 'skillInvoked', player: f.player, skill: 'yinghun' });
+        if (resp.index === 0) {
+          drawCards(ctx, f.target!, x); // 摸X弃一
+          f.need = 1;
+        } else {
+          drawCards(ctx, f.target!, 1); // 摸一弃X
+          f.need = x;
+        }
+        askYinghunDiscard(ctx, f);
+        return;
+      }
+      case 'discard-wait': {
+        if (resp.kind !== 'cards') fail('应答类型不符合当前请求');
+        const t = player(s, f.target!);
+        const need = Math.min(f.need!, t.hand.length);
+        if (resp.cardIds.length !== need
+            || new Set(resp.cardIds).size !== resp.cardIds.length
+            || !resp.cardIds.every((id) => t.hand.includes(id))) {
+          fail(`英魂需要弃置 ${need} 张手牌`);
+        }
+        if (resp.cardIds.length > 0) moveCards(ctx, resp.cardIds, { zone: 'discard' }, 'yinghun');
+        popFrame(ctx, f);
+        return;
+      }
+      default:
+        fail(`yinghun 帧在 ${f.step} 步不接受应答`);
+    }
+  },
+};
+
+function askYinghunDiscard(ctx: Ctx, f: YinghunFrame): void {
+  const t = player(ctx.s, f.target!);
+  const need = Math.min(f.need!, t.hand.length);
+  if (need === 0) { popFrame(ctx, f); return; }
+  ask(ctx, {
+    player: f.target!, type: 'choose-cards', from: 'hand',
+    min: need, max: need, canDecline: false, reason: { kind: 'yinghun' },
+  });
+  f.step = 'discard-wait';
+}
+
 // ---------- 烈刃(祝融) ----------
 
 const lieren: FrameHandler<LierenFrame> = {
@@ -2665,6 +2750,6 @@ export const frameHandlers: Record<EffectFrame['type'], FrameHandler<any>> = {
   guanxing, luoshen, 'draw-step': drawStep, delayed, kurou, fanjian, aoe, jiedao,
   huogong, tiesuo, shensu, jushou, leiji, guhuo,
   pindian, quhu, tianyi,
-  lieren, benghuai, luanwu,
+  lieren, benghuai, luanwu, yinghun,
   'choose-generals': chooseGenerals,
 };

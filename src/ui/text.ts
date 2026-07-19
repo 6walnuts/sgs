@@ -28,7 +28,7 @@ export const GENERAL_NAMES: Record<string, string> = {
   dianwei: '典韦', xunyu: '荀彧', pangtong: '庞统', wolong: '诸葛亮·卧龙',
   taishici: '太史慈', pangde: '庞德', yanliangwenchou: '颜良文丑', yuanshao: '袁绍',
   caopi: '曹丕', xuhuang: '徐晃', menghuo: '孟获', zhurong: '祝融',
-  lusu: '鲁肃', dongzhuo: '董卓', jiaxu: '贾诩',
+  lusu: '鲁肃', sunjian: '孙坚', dongzhuo: '董卓', jiaxu: '贾诩',
 };
 
 export const SKILL_NAMES: Record<SkillName, string> = {
@@ -56,7 +56,7 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   huoshou: '祸首', zaiqi: '再起', juxiang: '巨象', lieren: '烈刃',
   haoshi: '好施', dimeng: '缔盟', jiuchi: '酒池', roulin: '肉林',
   benghuai: '崩坏', baonve: '暴虐', wansha: '完杀', luanwu: '乱武',
-  weimu: '帷幕',
+  weimu: '帷幕', yinghun: '英魂',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -290,6 +290,8 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return `拼点:与 ${label(req.reason.target!)} 各选一张手牌比点数,大者胜`;
         case 'haoshi':
           return '好施:选择一半手牌交给手牌最少的一名其他角色';
+        case 'yinghun':
+          return '英魂:请弃置指定数量的手牌';
         default:
           return `请弃置 ${req.min} 张手牌`;
       }
@@ -330,6 +332,7 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'lieren': return '是否发动【烈刃】与目标拼点?(赢则获得其一张牌)';
         case 'baonve': return '是否发动【暴虐】判定?(黑桃则主公回复1点体力)';
         case 'benghuai': return '崩坏:你不是体力最小的角色,失去1点体力或减1点体力上限';
+        case 'yinghun': return '英魂:选择令目标摸X弃一,或摸一弃X(X=你已损失的体力)';
       }
       return '';
     case 'choose-player':
@@ -341,6 +344,7 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
         case 'jieming': return '节命:令一名角色将手牌补至其体力上限';
         case 'quhu': return '驱虎:选择拼点对象攻击范围内的一名角色,由其对之造成1点伤害';
         case 'fangzhu': return '放逐:令一名其他角色翻面并摸等同于你已损失体力的牌';
+        case 'yinghun': return '英魂:选择一名其他角色(摸X弃一或摸一弃X,X=你已损失的体力)';
         case 'haoshi': return '好施:选择获得这些牌的角色(手牌最少者)';
         case 'luanwu': return '乱武:选择距离最近的一名角色作为杀的目标';
         default: return '请选择目标角色';
@@ -398,6 +402,8 @@ export const OPTION_LABELS: Record<string, string> = {
   baonve: '发动暴虐',
   'benghuai-hp': '失去1点体力',
   'benghuai-maxhp': '减1点体力上限',
+  'yinghun-a': '摸X张弃一张',
+  'yinghun-b': '摸一张弃X张',
   spade: '♠ 黑桃',
   heart: '♥ 红桃',
   club: '♣ 梅花',

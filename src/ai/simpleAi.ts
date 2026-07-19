@@ -466,6 +466,8 @@ function decideOption(
     case 'haoshi':
       // 手牌不多时白赚两张(超过5张要送出一半)
       return p.hand.length + 2 <= 5 ? { kind: 'option', index: 0 } : { kind: 'decline' };
+    case 'yinghun':
+      return { kind: 'option', index: 0 }; // 摸X弃一,对队友收益最大
     case 'benghuai':
       // 体力充裕时掉体力,残血时掉上限
       return p.hp >= 2 ? { kind: 'option', index: 0 } : { kind: 'option', index: 1 };
@@ -594,6 +596,12 @@ function decideChoosePlayer(
     case 'haoshi': {
       const ally = cands.find((x) => !isEnemy(s, p.role, x));
       return { kind: 'players', players: [(ally ?? cands[0]).id] };
+    }
+    case 'yinghun': {
+      // 送牌给自己人;没有队友则放弃
+      const ally = cands.find((x) => !isEnemy(s, p.role, x));
+      if (ally) return { kind: 'players', players: [ally.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
     }
     case 'luanwu': {
       const t = enemies[0] ?? cands[0];

@@ -60,6 +60,8 @@ export function flowRun(ctx: Ctx): void {
           pushFrame(ctx, { type: 'guanxing', step: 'ask', player: p.id });
         } else if (hasSkill(s, p, 'luoshen')) {
           pushFrame(ctx, { type: 'luoshen', step: 'ask', player: p.id });
+        } else if (hasSkill(s, p, 'yinghun') && p.hp < p.maxHp) {
+          pushFrame(ctx, { type: 'yinghun', step: 'start', player: p.id });
         }
         return;
       }
