@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { GeneralId } from '../engine/types';
 import { GENERALS } from '../engine/generals';
 import { GENERAL_NAMES } from './text';
+import { loadSettings } from './settings';
 
 export const FACTION_COLORS: Record<string, string> = {
   wei: '#3f6ea5',
@@ -445,9 +446,14 @@ const PORTRAITS: Record<GeneralId, () => ReactNode> = {
 
 export function GeneralPortrait({ general }: { general: GeneralId }) {
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [srcIdx, setSrcIdx] = useState(0);
   const faction = GENERALS[general].faction;
   const [bgTop, bgBottom] = FACTION_BG[faction];
   const gradId = `pg-${general}`;
+  // 按设置决定图片候选:经典卡牌先试 official 目录,失败退回自备 jpg,再退回内置矢量
+  const sources = loadSettings().portraitStyle === 'card'
+    ? [`/generals/official/${general}.png`, `/generals/${general}.jpg`]
+    : [`/generals/${general}.jpg`];
   return (
     <div className={`portrait portrait-${faction}`} title={GENERAL_NAMES[general]}>
       {!imgLoaded && (
@@ -463,12 +469,18 @@ export function GeneralPortrait({ general }: { general: GeneralId }) {
           {PORTRAITS[general]()}
         </svg>
       )}
-      <img
-        src={`/generals/${general}.jpg`}
-        alt={GENERAL_NAMES[general]}
-        style={imgLoaded ? undefined : { display: 'none' }}
-        onLoad={() => setImgLoaded(true)}
-      />
+      {srcIdx < sources.length && (
+        <img
+          src={sources[srcIdx]}
+          alt={GENERAL_NAMES[general]}
+          style={imgLoaded ? undefined : { display: 'none' }}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => {
+            setImgLoaded(false);
+            setSrcIdx((i) => i + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

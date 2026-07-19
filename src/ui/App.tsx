@@ -4,26 +4,10 @@ import { HUMAN_ID, LocalGame } from '../game/localGame';
 import { NetGame, defaultWsUrl } from '../game/netGame';
 import type { NetIntent } from '../game/netGame';
 import { GameBoard } from './GameBoard';
+import { loadSettings, saveSettings } from './settings';
+import type { GameSettings } from './settings';
 
 type PlayerCount = 4 | 5 | 8;
-
-// 对局设置(持久化到 localStorage)
-interface GameSettings {
-  pickGenerals: boolean;
-  generalCandidates: number; // 每人候选武将数(主公 +2);8 人局会被引擎自动下调
-  aiDelayMs: number;
-}
-
-const SETTINGS_KEY = 'sgs-settings';
-const DEFAULT_SETTINGS: GameSettings = { pickGenerals: true, generalCandidates: 3, aiDelayMs: 900 };
-
-function loadSettings(): GameSettings {
-  try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
 
 const AI_DELAY_OPTIONS: Array<{ label: string; ms: number }> = [
   { label: '快(0.4s)', ms: 400 },
@@ -71,13 +55,7 @@ function Menu({ onLocal, onOnline }: {
   const [playerCount, setPlayerCount] = useState<PlayerCount>(4);
   const [settings, setSettings] = useState<GameSettings>(loadSettings);
   const update = (patch: Partial<GameSettings>) => {
-    setSettings((cur) => {
-      const next = { ...cur, ...patch };
-      try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-      } catch { /* 隐私模式等存储不可用时忽略 */ }
-      return next;
-    });
+    setSettings(saveSettings(patch));
   };
   return (
     <div className="menu">
@@ -136,6 +114,21 @@ function Menu({ onLocal, onOnline }: {
               {o.label}
             </button>
           ))}
+        </div>
+        <div className="menu-row">
+          <label>头像</label>
+          <button
+            className={settings.portraitStyle === 'cartoon' ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ portraitStyle: 'cartoon' })}
+          >
+            卡通插画
+          </button>
+          <button
+            className={settings.portraitStyle === 'card' ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ portraitStyle: 'card' })}
+          >
+            经典卡牌
+          </button>
         </div>
         <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount, settings)}>
           单机游戏(1 人 + {playerCount - 1} AI)
