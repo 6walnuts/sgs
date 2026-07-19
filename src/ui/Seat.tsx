@@ -2,13 +2,13 @@ import type { GameState, PlayerId } from '../engine/types';
 import { GENERAL_NAMES, ROLE_NAMES, SKILL_NAMES } from './text';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
-import { HUMAN_ID } from '../game/localGame';
 
 export function Seat({
-  state, pid, targetable, targeted, onTarget, onEquipClick, selectedCards,
+  state, pid, humanId, targetable, targeted, onTarget, onEquipClick, selectedCards,
 }: {
   state: GameState;
   pid: PlayerId;
+  humanId: PlayerId;
   targetable: boolean;
   targeted: boolean;
   onTarget?: () => void;
@@ -17,7 +17,7 @@ export function Seat({
 }) {
   const p = state.players.find((x) => x.id === pid)!;
   const isActive = state.turn.activePlayer === pid && !state.winner;
-  const roleVisible = pid === HUMAN_ID || p.roleRevealed || state.winner !== null;
+  const roleVisible = pid === humanId || p.roleRevealed || state.winner !== null;
   const waiting = state.pendingRequest?.player === pid;
   const equips = Object.values(p.equips).filter((x): x is number => x !== undefined);
 
@@ -34,7 +34,7 @@ export function Seat({
     >
       <div className="seat-header">
         <span className="seat-general">{GENERAL_NAMES[p.general]}</span>
-        {pid === HUMAN_ID && <span className="seat-you">你</span>}
+        {pid === humanId && <span className="seat-you">你</span>}
         <span className={roleVisible ? `role role-${p.role}` : 'role role-hidden'}>
           {roleVisible ? ROLE_NAMES[p.role] : '?'}
         </span>

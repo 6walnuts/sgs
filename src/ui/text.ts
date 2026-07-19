@@ -50,81 +50,83 @@ export function cardLabel(s: GameState, id: number): string {
   return `${CARD_NAMES[c.name]}${SUIT_SYMBOLS[c.suit]}${rankLabel(c.rank)}`;
 }
 
-export function playerLabel(s: GameState, pid: PlayerId): string {
+export function playerLabel(s: GameState, pid: PlayerId, humanId?: PlayerId): string {
   const p = s.players.find((x) => x.id === pid)!;
-  const you = pid === 'p0' ? '(你)' : '';
+  const you = humanId !== undefined && pid === humanId ? '(你)' : '';
   return `${GENERAL_NAMES[p.general]}${you}`;
 }
 
-export function describeEvent(s: GameState, ev: GameEvent): string | null {
+export function describeEvent(s: GameState, ev: GameEvent, humanId?: PlayerId): string | null {
+  const label = (pid: PlayerId) => playerLabel(s, pid, humanId);
   switch (ev.type) {
     case 'turnStarted':
-      return `—— ${playerLabel(s, ev.player)} 的回合 ——`;
+      return `—— ${label(ev.player)} 的回合 ——`;
     case 'phaseChanged':
       return null;
     case 'cardPlayed': {
       const as = ev.as ? `(当作${CARD_NAMES[ev.as]})` : '';
       const tgt = ev.targets.length > 0 && ev.targets[0] !== ev.player
-        ? ` 对 ${ev.targets.map((t) => playerLabel(s, t)).join('、')}`
+        ? ` 对 ${ev.targets.map((t) => label(t)).join('、')}`
         : '';
-      return `${playerLabel(s, ev.player)}${tgt} 使用了 ${cardLabel(s, ev.cardId)}${as}`;
+      return `${label(ev.player)}${tgt} 使用了 ${cardLabel(s, ev.cardId)}${as}`;
     }
     case 'cardResponded': {
       const as = ev.as ? `(当作${CARD_NAMES[ev.as]})` : '';
-      return `${playerLabel(s, ev.player)} 打出了 ${cardLabel(s, ev.cardId)}${as}`;
+      return `${label(ev.player)} 打出了 ${cardLabel(s, ev.cardId)}${as}`;
     }
     case 'cardsMoved': {
       switch (ev.reason) {
         case 'draw':
-          return `${playerLabel(s, ev.to.player!)} 摸了 ${ev.cardIds.length} 张牌`;
+          return `${label(ev.to.player!)} 摸了 ${ev.cardIds.length} 张牌`;
         case 'discard-phase':
         case 'zhiheng':
         case 'qingnang':
         case 'lijian':
-          return `${playerLabel(s, ev.from.player!)} 弃置了 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')}`;
+          return `${label(ev.from.player!)} 弃置了 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')}`;
         case 'rende':
-          return `${playerLabel(s, ev.from.player!)} 将 ${ev.cardIds.length} 张手牌交给了 ${playerLabel(s, ev.to.player!)}`;
+          return `${label(ev.from.player!)} 将 ${ev.cardIds.length} 张手牌交给了 ${label(ev.to.player!)}`;
         case 'guohe':
           return ev.from.zone === 'hand'
-            ? `${playerLabel(s, ev.from.player!)} 的一张手牌被弃置`
-            : `${playerLabel(s, ev.from.player!)} 的 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')} 被弃置`;
+            ? `${label(ev.from.player!)} 的一张手牌被弃置`
+            : `${label(ev.from.player!)} 的 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')} 被弃置`;
         case 'shunshou':
-          return `${playerLabel(s, ev.to.player!)} 获得了 ${playerLabel(s, ev.from.player!)} 的一张牌`;
+          return `${label(ev.to.player!)} 获得了 ${label(ev.from.player!)} 的一张牌`;
         case 'jianxiong':
         case 'fankui':
-          return `${playerLabel(s, ev.to.player!)} 获得了 ${ev.cardIds.length} 张牌`;
+          return `${label(ev.to.player!)} 获得了 ${ev.cardIds.length} 张牌`;
         case 'replace-equip':
-          return `${playerLabel(s, ev.from.player!)} 替换下 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')}`;
+          return `${label(ev.from.player!)} 替换下 ${ev.cardIds.map((id) => cardLabel(s, id)).join('、')}`;
         default:
           return null;
       }
     }
     case 'damage':
       return ev.source
-        ? `${playerLabel(s, ev.source)} 对 ${playerLabel(s, ev.target)} 造成了 ${ev.amount} 点伤害`
-        : `${playerLabel(s, ev.target)} 受到了 ${ev.amount} 点伤害`;
+        ? `${label(ev.source)} 对 ${label(ev.target)} 造成了 ${ev.amount} 点伤害`
+        : `${label(ev.target)} 受到了 ${ev.amount} 点伤害`;
     case 'hpChanged':
       return ev.delta > 0
-        ? `${playerLabel(s, ev.player)} 回复了 ${ev.delta} 点体力(${ev.hp})`
+        ? `${label(ev.player)} 回复了 ${ev.delta} 点体力(${ev.hp})`
         : null;
     case 'judge':
-      return `${playerLabel(s, ev.player)} 判定:${cardLabel(s, ev.cardId)}`;
+      return `${label(ev.player)} 判定:${cardLabel(s, ev.cardId)}`;
     case 'skillInvoked':
-      return `${playerLabel(s, ev.player)} 发动了【${SKILL_NAMES[ev.skill]}】`;
+      return `${label(ev.player)} 发动了【${SKILL_NAMES[ev.skill]}】`;
     case 'nullified':
       return `${CARD_NAMES[ev.cardName]} 被无懈可击抵消了`;
     case 'reshuffled':
       return '弃牌堆洗回了牌堆';
     case 'playerDied': {
-      const killer = ev.killer ? `被 ${playerLabel(s, ev.killer)} 杀死,` : '';
-      return `${playerLabel(s, ev.player)}(${ROLE_NAMES[ev.role]})${killer}阵亡`;
+      const killer = ev.killer ? `被 ${label(ev.killer)} 杀死,` : '';
+      return `${label(ev.player)}(${ROLE_NAMES[ev.role]})${killer}阵亡`;
     }
     case 'gameOver':
       return `游戏结束!${ev.winner.map((r) => ROLE_NAMES[r]).join('、')} 阵营获胜`;
   }
 }
 
-export function describeRequest(s: GameState, req: PendingRequest): string {
+export function describeRequest(s: GameState, req: PendingRequest, humanId?: PlayerId): string {
+  const label = (pid: PlayerId) => playerLabel(s, pid, humanId);
   switch (req.type) {
     case 'play':
       return '你的出牌阶段';
@@ -132,18 +134,18 @@ export function describeRequest(s: GameState, req: PendingRequest): string {
       const r = req.reason;
       switch (r.kind) {
         case 'slash':
-          return `${playerLabel(s, r.source!)} 对你使用了杀,是否打出闪?`;
+          return `${label(r.source!)} 对你使用了杀,是否打出闪?`;
         case 'duel':
-          return `与 ${playerLabel(s, r.source!)} 决斗中,是否打出杀?`;
+          return `与 ${label(r.source!)} 决斗中,是否打出杀?`;
         case 'qinglong':
-          return `青龙偃月刀:是否立即对 ${playerLabel(s, r.target!)} 再使用一张杀?`;
+          return `青龙偃月刀:是否立即对 ${label(r.target!)} 再使用一张杀?`;
         case 'dying':
           return r.who === req.player
             ? '你处于濒死状态,是否使用桃?'
-            : `${playerLabel(s, r.who!)} 濒死,是否使用桃救援?`;
+            : `${label(r.who!)} 濒死,是否使用桃救援?`;
         case 'nullify': {
           const neg = r.negated ? '(它当前已被无懈)' : '';
-          return `${playerLabel(s, r.source!)} 对 ${playerLabel(s, r.target!)} 使用了${CARD_NAMES[r.cardName!]}${neg},是否使用无懈可击?`;
+          return `${label(r.source!)} 对 ${label(r.target!)} 使用了${CARD_NAMES[r.cardName!]}${neg},是否使用无懈可击?`;
         }
         default:
           return '请打出一张牌';
@@ -151,7 +153,7 @@ export function describeRequest(s: GameState, req: PendingRequest): string {
     }
     case 'choose-cards':
       return req.reason.kind === 'guicai'
-        ? `是否发动【鬼才】打出一张手牌替换 ${playerLabel(s, req.reason.who!)} 的判定牌?`
+        ? `是否发动【鬼才】打出一张手牌替换 ${label(req.reason.who!)} 的判定牌?`
         : `请弃置 ${req.min} 张手牌`;
     case 'choose-option':
       switch (req.reason) {
@@ -162,7 +164,7 @@ export function describeRequest(s: GameState, req: PendingRequest): string {
       return '';
     case 'pick-card': {
       const what = req.reason === 'guohe' ? '弃置' : '获得';
-      return `选择要${what}的 ${playerLabel(s, req.target)} 的一张牌`;
+      return `选择要${what}的 ${label(req.target)} 的一张牌`;
     }
   }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
-import type { GameState } from '../engine/types';
+import type { GameState, PlayerId } from '../engine/types';
 import { describeEvent } from './text';
 
-export function Log({ state }: { state: GameState }) {
+export function Log({ state, humanId }: { state: GameState; humanId: PlayerId }) {
   const ref = useRef<HTMLDivElement>(null);
   const lines = state.eventLog
-    .map((ev, i) => ({ i, text: describeEvent(state, ev) }))
+    .map((ev, i) => ({ i, text: describeEvent(state, ev, humanId) }))
     .filter((x): x is { i: number; text: string } => x.text !== null);
 
   useEffect(() => {

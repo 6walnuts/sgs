@@ -6,7 +6,6 @@ import { isRed } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { OPTION_LABELS, describeRequest } from './text';
-import { HUMAN_ID } from '../game/localGame';
 
 const TIMEOUT_SECONDS = 20;
 
@@ -60,7 +59,7 @@ export function PromptDialog({
     if (secondsLeft <= 0) onTimeout();
   }, [secondsLeft, onTimeout]);
 
-  const human = state.players.find((x) => x.id === HUMAN_ID)!;
+  const human = state.players.find((x) => x.id === req.player)!;
   const candidates = useMemo(
     () => (req.type === 'respond-card' ? respondCandidates(state, req) : []),
     [state, req],
@@ -164,7 +163,7 @@ export function PromptDialog({
     <div className="dialog-backdrop">
       <div className="dialog">
         <div className="dialog-title">
-          {describeRequest(state, req)}
+          {describeRequest(state, req, req.player)}
           <span className="countdown">{Math.max(0, secondsLeft)}s</span>
         </div>
         <div className="dialog-body">{body}</div>

@@ -1,61 +1,35 @@
-// 视角过滤:生成某个玩家可见的状态(联机同步时服务器按玩家分发)。
-// 本地版 UI 直接持有完整 state 并自行遮挡;此模块为联机预留并保证可行性。
+// 视角过滤:生成某个玩家可见的状态副本,联机时服务器按玩家分发,
+// 防止客户端读到不该看到的信息(他人手牌、牌堆顺序、未亮身份、随机数状态)。
+// 副本仍是合法的 GameState 形状,UI 无需区分本地/联机:
+// - 隐藏的卡牌 id 一律替换为 -1(数量保留)
+// - 未亮出的身份替换为占位值 'loyalist'(UI 只在 roleRevealed/自己/终局时展示身份)
+// - 结算栈清空(栈帧内含无懈询问队列等私密信息,UI 不消费栈)
 
-import type { CardId, GameState, PlayerId, Role } from './types';
+import type { GameEvent, GameState, PlayerId } from './types';
 
-export interface PlayerView {
-  id: PlayerId;
-  seat: number;
-  general: string;
-  role: Role | null; // 不可见时为 null
-  roleRevealed: boolean;
-  maxHp: number;
-  hp: number;
-  alive: boolean;
-  hand: CardId[]; // 仅自己可见,他人为空数组
-  handCount: number;
-  equips: GameState['players'][number]['equips'];
-  judgeZone: CardId[];
+const PUBLIC_ZONES = new Set(['discard', 'processing', 'equip', 'judge']);
+
+function redactEvent(ev: GameEvent, viewer: PlayerId): GameEvent {
+  if (ev.type !== 'cardsMoved') return ev;
+  const visible =
+    PUBLIC_ZONES.has(ev.from.zone) ||
+    PUBLIC_ZONES.has(ev.to.zone) ||
+    ev.from.player === viewer ||
+    ev.to.player === viewer;
+  if (visible) return ev;
+  return { ...ev, cardIds: ev.cardIds.map(() => -1) };
 }
 
-export interface GameView {
-  viewer: PlayerId;
-  players: PlayerView[];
-  cards: GameState['cards'];
-  drawCount: number;
-  discardPile: CardId[];
-  processingZone: CardId[];
-  turn: GameState['turn'];
-  pendingRequest: GameState['pendingRequest'];
-  winner: GameState['winner'];
-}
-
-export function viewFor(s: GameState, viewer: PlayerId): GameView {
-  return {
-    viewer,
-    players: s.players.map((p) => {
-      const visible = p.id === viewer || p.roleRevealed || s.winner !== null;
-      return {
-        id: p.id,
-        seat: p.seat,
-        general: p.general,
-        role: visible ? p.role : null,
-        roleRevealed: p.roleRevealed,
-        maxHp: p.maxHp,
-        hp: p.hp,
-        alive: p.alive,
-        hand: p.id === viewer ? p.hand.slice() : [],
-        handCount: p.hand.length,
-        equips: { ...p.equips },
-        judgeZone: p.judgeZone.slice(),
-      };
-    }),
-    cards: s.cards,
-    drawCount: s.drawPile.length,
-    discardPile: s.discardPile.slice(),
-    processingZone: s.processingZone.slice(),
-    turn: { ...s.turn },
-    pendingRequest: s.pendingRequest ? { ...s.pendingRequest } : null,
-    winner: s.winner ? s.winner.slice() : null,
-  };
+export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
+  const c = structuredClone(s);
+  c.rngState = 0;
+  c.stack = [];
+  c.drawPile = c.drawPile.map(() => -1);
+  for (const p of c.players) {
+    if (p.id === viewer) continue;
+    p.hand = p.hand.map(() => -1);
+    if (!p.roleRevealed && !c.winner) p.role = 'loyalist';
+  }
+  c.eventLog = c.eventLog.map((ev) => redactEvent(ev, viewer));
+  return c;
 }

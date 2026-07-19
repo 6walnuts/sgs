@@ -1,15 +1,20 @@
-# 网页版三国杀(单机版)
+# 网页版三国杀
 
-标准身份场 4 人局:1 名人类玩家 + 3 个 AI。游戏引擎与 UI 完全分离,为将来联机预留了架构。
+标准身份场 4 人局,支持单机(1 人 + 3 AI)与联机(1~4 名真人,空位由 AI 补足)。
+游戏引擎与 UI 完全分离,单机与联机复用同一引擎与 AI。
 
 ## 运行
 
 ```bash
 npm install
-npm run dev      # 开发服务器
-npm test         # 引擎单元测试(vitest)
+npm run dev      # 前端开发服务器(单机模式可直接玩)
+npm run server   # 联机服务器(ws://localhost:8081,联机模式需要)
+npm test         # 引擎单元测试 + 服务器集成测试(vitest)
 npm run build    # 类型检查 + 生产构建
 ```
+
+联机:一人在主菜单"创建联机房间"得到 4 位房间号,其他人凭房间号加入,
+房主点开始;跨机器游玩时设置 `VITE_WS_URL` 指向服务器地址。
 
 ## 架构
 
@@ -24,11 +29,14 @@ src/
 │   ├── rules.ts   距离、攻击范围、出牌合法性
 │   ├── setup.ts   建局(洗牌、分身份、分武将)
 │   ├── rng.ts     可序列化随机数(状态存在 GameState.rngState 里)
-│   └── view.ts    视角过滤 viewFor(联机时按玩家分发用)
+│   └── view.ts    视角过滤 redactStateFor:隐藏他人手牌/身份/牌堆/随机数
 ├── ai/            simpleAi:读取状态 → 产出 ResponseData,绝不直接改状态
-├── game/          LocalGame:本地宿主,把人类/AI 应答统一喂给引擎
-│                  (联机时这一层换成服务器 + WebSocket,引擎与 AI 不动)
-└── ui/            React 单页应用
+├── net/           protocol.ts:客户端↔服务器的 WebSocket 消息类型
+├── server/        联机服务器:房间管理 + 权威对局(复用引擎与 AI),
+│                  按玩家视角分发过滤后的状态;AI 座位/掉线/超时由服务器代答
+├── game/          对局会话:LocalGame(本地宿主)与 NetGame(联机客户端),
+│                  二者接口同构,UI 不感知状态来自哪里
+└── ui/            React 单页应用(菜单 / 联机大厅 / 共用棋盘 GameBoard)
 ```
 
 ### 核心机制
@@ -41,7 +49,11 @@ src/
   序列可完整重放。
 - **请求-响应**:引擎任意时刻最多一个 `pendingRequest`,一切输入都是对它的
   应答(带 requestId 防过期/乱序)。人类由 UI 应答,AI 由 simpleAi 应答,
-  联机时由 WebSocket 应答,接口完全一致。
+  联机时经 WebSocket 应答,接口完全一致。
+- **联机安全模型**:服务器持有唯一权威状态;客户端只收到
+  `redactStateFor(state, 玩家)` 的过滤副本 —— 他人手牌与牌堆替换为占位 id、
+  未亮身份替换为占位值、随机数状态与结算栈不下发,改客户端也无法作弊偷看。
+  断线凭 token 自动重连恢复座位;掉线/超时玩家由服务器代答,不会卡住对局。
 
 ## 已实现内容
 

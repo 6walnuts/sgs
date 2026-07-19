@@ -230,3 +230,57 @@ body {
   .log { max-height: 300px; }
   .human-area { grid-template-columns: 1fr; }
 }
+
+/* ---------- 菜单与联机大厅 ---------- */
+
+.menu {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+}
+
+.menu-title { font-size: 42px; color: #d8b84a; letter-spacing: 8px; }
+
+.menu-card {
+  background: #24402f;
+  border: 2px solid #3a5a45;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 90vw);
+}
+
+.menu-btn { width: 100%; padding: 12px; font-size: 16px; }
+
+.menu-row { display: flex; align-items: center; gap: 10px; }
+.menu-row label { font-size: 14px; color: #b9c9be; white-space: nowrap; }
+.menu-row input {
+  flex: 1;
+  min-width: 0;
+  background: #1a2f23;
+  border: 1px solid #4a6a55;
+  border-radius: 8px;
+  color: #e8e2d0;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.lobby-roomid { font-size: 18px; }
+.lobby-roomid strong { color: #d8b84a; font-size: 24px; letter-spacing: 3px; }
+
+.lobby-members { display: flex; flex-direction: column; gap: 8px; }
+.lobby-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1e3628;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.lobby-ai { color: #8aa392; font-style: italic; }

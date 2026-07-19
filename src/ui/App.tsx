@@ -1,44 +1,112 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
-import { GENERALS } from '../engine/generals';
+import { useEffect, useMemo, useReducer, useState } from 'react';
+import type { GameState, ResponseData } from '../engine/types';
 import { HUMAN_ID, LocalGame } from '../game/localGame';
-import { CardChip } from './CardChip';
-import { Seat } from './Seat';
-import { PromptDialog } from './PromptDialog';
-import { Log } from './Log';
-import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES } from './text';
+import { NetGame, defaultWsUrl } from '../game/netGame';
+import type { NetIntent } from '../game/netGame';
+import { GameBoard } from './GameBoard';
 
-type ActiveSkill = 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang';
-
-function targetsNeeded(state: GameState, skill: ActiveSkill | null, cardIds: number[]): number {
-  if (skill) {
-    switch (skill) {
-      case 'lijian': return 2;
-      case 'zhiheng': return 0;
-      default: return 1;
-    }
-  }
-  if (cardIds.length !== 1) return 0;
-  const name = state.cards[cardIds[0]].name;
-  return ['sha', 'guohe', 'shunshou', 'juedou'].includes(name) ? 1 : 0;
-}
-
-function multiSelect(skill: ActiveSkill | null): boolean {
-  return skill === 'rende' || skill === 'zhiheng';
-}
+type Screen =
+  | { kind: 'menu' }
+  | { kind: 'local' }
+  | { kind: 'online'; intent: NetIntent };
 
 export function App() {
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
-  return <Game key={seed} seed={seed} onRestart={() => setSeed(Math.floor(Math.random() * 1e9))} />;
+  const [screen, setScreen] = useState<Screen>({ kind: 'menu' });
+  const toMenu = () => setScreen({ kind: 'menu' });
+  switch (screen.kind) {
+    case 'menu':
+      return (
+        <Menu
+          onLocal={() => setScreen({ kind: 'local' })}
+          onOnline={(intent) => setScreen({ kind: 'online', intent })}
+        />
+      );
+    case 'local':
+      return <LocalPlay onExit={toMenu} />;
+    case 'online':
+      return <OnlinePlay intent={screen.intent} onExit={toMenu} />;
+  }
 }
 
-function Game({ seed, onRestart }: { seed: number; onRestart: () => void }) {
+// ---------- 主菜单 ----------
+
+function Menu({ onLocal, onOnline }: {
+  onLocal: () => void;
+  onOnline: (intent: NetIntent) => void;
+}) {
+  const [name, setName] = useState('玩家');
+  const [roomId, setRoomId] = useState('');
+  return (
+    <div className="menu">
+      <h1 className="menu-title">三国杀</h1>
+      <div className="menu-card">
+        <button className="btn btn-primary menu-btn" onClick={onLocal}>
+          单机游戏(1 人 + 3 AI)
+        </button>
+        <div className="menu-row">
+          <label>昵称</label>
+          <input value={name} maxLength={12} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <button
+          className="btn btn-primary menu-btn"
+          onClick={() => onOnline({ kind: 'create', name })}
+        >
+          创建联机房间
+        </button>
+        <div className="menu-row">
+          <label>房间号</label>
+          <input
+            value={roomId}
+            maxLength={4}
+            placeholder="如 AB3D"
+            onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+          />
+          <button
+            className="btn"
+            disabled={roomId.trim().length !== 4}
+            onClick={() => onOnline({ kind: 'join', roomId: roomId.trim(), name })}
+          >
+            加入房间
+          </button>
+        </div>
+        <div className="dialog-hint">联机需先运行 npm run server(空位由 AI 补足)</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- 单机 ----------
+
+function LocalPlay({ onExit }: { onExit: () => void }) {
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  return (
+    <LocalSession
+      key={seed}
+      seed={seed}
+      onRestart={() => setSeed(Math.floor(Math.random() * 1e9))}
+      onExit={onExit}
+    />
+  );
+}
+
+function useToast(): [string | null, (msg: string) => void] {
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  return [toast, setToast];
+}
+
+function LocalSession({ seed, onRestart, onExit }: {
+  seed: number;
+  onRestart: () => void;
+  onExit: () => void;
+}) {
   const game = useMemo(() => new LocalGame(seed), [seed]);
   const [state, setState] = useState<GameState>(game.state);
-  const [error, setError] = useState<string | null>(null);
-  const [selCards, setSelCards] = useState<number[]>([]);
-  const [selSkill, setSelSkill] = useState<ActiveSkill | null>(null);
-  const [selTargets, setSelTargets] = useState<PlayerId[]>([]);
+  const [toast, setToast] = useToast();
 
   useEffect(() => {
     const off = game.onChange(setState);
@@ -50,191 +118,122 @@ function Game({ seed, onRestart }: { seed: number; onRestart: () => void }) {
     };
   }, [game]);
 
-  const req = state.pendingRequest;
-  const isMyPlay = req?.type === 'play' && req.player === HUMAN_ID && !state.winner;
-  const needDialog = req && req.player === HUMAN_ID && req.type !== 'play' && !state.winner;
-
-  const resetSelection = useCallback(() => {
-    setSelCards([]);
-    setSelSkill(null);
-    setSelTargets([]);
-  }, []);
-
-  useEffect(() => {
-    resetSelection();
-  }, [req?.id, resetSelection]);
-
-  useEffect(() => {
-    if (!error) return;
-    const t = setTimeout(() => setError(null), 3000);
-    return () => clearTimeout(t);
-  }, [error]);
-
-  const submit = useCallback((resp: ResponseData) => {
+  const submit = (resp: ResponseData) => {
     const err = game.submitHuman(resp);
-    if (err) setError(err);
-    else resetSelection();
-  }, [game, resetSelection]);
-
-  const human = state.players.find((p) => p.id === HUMAN_ID)!;
-  const needed = targetsNeeded(state, selSkill, selCards);
-
-  const toggleCard = (id: number) => {
-    if (!isMyPlay) return;
-    setSelTargets([]);
-    setSelCards((cur) => {
-      if (cur.includes(id)) return cur.filter((x) => x !== id);
-      return multiSelect(selSkill) ? [...cur, id] : [id];
-    });
+    if (err) setToast(err);
   };
-
-  const toggleTarget = (pid: PlayerId) => {
-    if (!isMyPlay || needed === 0) return;
-    setSelTargets((cur) => {
-      if (cur.includes(pid)) return cur.filter((x) => x !== pid);
-      if (cur.length >= needed) return needed === 1 ? [pid] : cur;
-      return [...cur, pid];
-    });
-  };
-
-  const confirm = () => {
-    if (selSkill) {
-      submit({ kind: 'use-skill', skill: selSkill as SkillName, cardIds: selCards, targets: selTargets });
-    } else if (selCards.length === 1) {
-      submit({ kind: 'play-card', cardId: selCards[0], targets: selTargets });
-    }
-  };
-
-  const canConfirm = isMyPlay
-    && (selSkill ? selCards.length > 0 : selCards.length === 1)
-    && selTargets.length === needed;
-
-  const activeSkills = (GENERALS[human.general].activeSkills as ActiveSkill[]);
-  const skillDisabled = (sk: ActiveSkill): boolean => {
-    switch (sk) {
-      case 'zhiheng': return !!human.flags.zhiheng;
-      case 'qingnang': return !!human.flags.qingnang;
-      case 'lijian': return !!human.flags.lijian;
-      default: return false;
-    }
-  };
-
-  const aiSeats: PlayerId[] = ['p1', 'p2', 'p3'];
 
   return (
-    <div className="app">
-      <div className="board">
-        <div className="seats-top">
-          {aiSeats.map((pid) => (
-            <Seat
-              key={pid}
-              state={state}
-              pid={pid}
-              targetable={isMyPlay && needed > 0 && state.players.find((p) => p.id === pid)!.alive}
-              targeted={selTargets.includes(pid)}
-              onTarget={() => toggleTarget(pid)}
-            />
-          ))}
-        </div>
+    <GameBoard
+      state={state}
+      humanId={HUMAN_ID}
+      submit={submit}
+      submitDefault={() => game.submitHumanDefault()}
+      toast={toast}
+      overContent={(
+        <>
+          <button className="btn btn-primary" onClick={onRestart}>再来一局</button>
+          <button className="btn" onClick={onExit}>返回菜单</button>
+        </>
+      )}
+    />
+  );
+}
 
-        <div className="table-center">
-          <span>牌堆 {state.drawPile.length}</span>
-          <span>弃牌堆 {state.discardPile.length}</span>
-          {state.discardPile.slice(-4).map((id) => (
-            <CardChip key={id} state={state} cardId={id} small />
-          ))}
-        </div>
+// ---------- 联机 ----------
 
-        <div className="human-area">
-          <Seat
-            state={state}
-            pid={HUMAN_ID}
-            targetable={false}
-            targeted={selTargets.includes(HUMAN_ID)}
-            selectedCards={selCards}
-            onEquipClick={
-              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian')
-                ? toggleCard
-                : undefined
-            }
-          />
-          <div className="human-main">
-            <div className="hand">
-              {human.hand.map((id) => (
-                <CardChip
-                  key={id}
-                  state={state}
-                  cardId={id}
-                  selected={selCards.includes(id)}
-                  onClick={isMyPlay ? () => toggleCard(id) : undefined}
-                  disabled={!isMyPlay}
-                />
-              ))}
-              {human.hand.length === 0 && <span className="dialog-hint">没有手牌</span>}
+function OnlinePlay({ intent, onExit }: { intent: NetIntent; onExit: () => void }) {
+  const net = useMemo(() => new NetGame(defaultWsUrl(), intent), [intent]);
+  const [, force] = useReducer((x: number) => x + 1, 0);
+  const [toast, setToast] = useToast();
+
+  useEffect(() => {
+    net.onUpdate = force;
+    net.onError = setToast;
+    net.start();
+    return () => {
+      net.onUpdate = null;
+      net.stop();
+    };
+  }, [net, setToast]);
+
+  const inGame = net.room?.phase === 'playing' && net.state && net.you;
+  if (!inGame) {
+    return <Lobby net={net} toast={toast} onExit={onExit} />;
+  }
+
+  return (
+    <GameBoard
+      state={net.state!}
+      humanId={net.you!}
+      submit={(resp) => {
+        const err = net.submitHuman(resp);
+        if (err) setToast(err);
+      }}
+      submitDefault={() => net.submitHumanDefault()}
+      toast={toast}
+      overContent={(
+        <>
+          {net.isHost
+            ? <button className="btn btn-primary" onClick={() => net.startGame()}>再来一局</button>
+            : <span className="dialog-hint">等待房主开始新对局…</span>}
+          <button className="btn" onClick={onExit}>离开房间</button>
+        </>
+      )}
+    />
+  );
+}
+
+function Lobby({ net, toast, onExit }: {
+  net: NetGame;
+  toast: string | null;
+  onExit: () => void;
+}) {
+  const room = net.room;
+  const statusText = {
+    connecting: '连接服务器中…',
+    open: room ? '' : '等待服务器响应…',
+    closed: '连接已断开,正在重连…',
+    failed: '无法连接服务器,请确认已运行 npm run server',
+  }[net.status];
+
+  return (
+    <div className="menu">
+      <h1 className="menu-title">联机大厅</h1>
+      <div className="menu-card">
+        {room && (
+          <>
+            <div className="lobby-roomid">
+              房间号:<strong>{room.roomId}</strong>
+              <span className="dialog-hint">(告诉朋友这个代码加入)</span>
             </div>
-            <div className="actions">
-              {activeSkills.map((sk) => (
-                <button
-                  key={sk}
-                  className={selSkill === sk ? 'btn btn-skill btn-skill-on' : 'btn btn-skill'}
-                  disabled={!isMyPlay || skillDisabled(sk)}
-                  title={SKILL_HINTS[sk]}
-                  onClick={() => {
-                    setSelSkill((cur) => (cur === sk ? null : sk));
-                    setSelCards([]);
-                    setSelTargets([]);
-                  }}
-                >
-                  {SKILL_NAMES[sk as SkillName]}
+            <div className="lobby-members">
+              {room.members.map((m) => (
+                <div key={m.seat} className="lobby-member">
+                  <span>{m.seat === room.you ? `${m.name}(你)` : m.name}</span>
+                  {m.isHost && <span className="role role-lord">房主</span>}
+                  {!m.connected && <span className="dead-tag">掉线</span>}
+                </div>
+              ))}
+              {Array.from({ length: 4 - room.members.length }, (_, i) => (
+                <div key={`ai-${i}`} className="lobby-member lobby-ai">
+                  <span>AI 玩家</span>
+                </div>
+              ))}
+            </div>
+            {net.isHost
+              ? (
+                <button className="btn btn-primary menu-btn" onClick={() => net.startGame()}>
+                  开始游戏
                 </button>
-              ))}
-              <button className="btn btn-primary" disabled={!canConfirm} onClick={confirm}>
-                出牌
-              </button>
-              <button
-                className="btn"
-                disabled={!isMyPlay}
-                onClick={() => submit({ kind: 'end-phase' })}
-              >
-                结束出牌
-              </button>
-            </div>
-            {isMyPlay && needed > selTargets.length && (
-              <div className="hint">请点击选择 {needed} 个目标</div>
-            )}
-          </div>
-        </div>
+              )
+              : <div className="dialog-hint">等待房主开始游戏…</div>}
+          </>
+        )}
+        {statusText && <div className="dialog-hint">{statusText}</div>}
+        <button className="btn" onClick={onExit}>返回菜单</button>
       </div>
-
-      <Log state={state} />
-
-      {needDialog && req && (
-        <PromptDialog
-          state={state}
-          req={req}
-          onSubmit={submit}
-          onTimeout={() => game.submitHumanDefault()}
-        />
-      )}
-
-      {state.winner && (
-        <div className="dialog-backdrop">
-          <div className="dialog">
-            <div className="dialog-title">
-              游戏结束:{state.winner.map((r) => ROLE_NAMES[r]).join('、')} 阵营获胜!
-            </div>
-            <div className="dialog-body">
-              <div className="dialog-hint">
-                你的身份:{ROLE_NAMES[human.role]}
-                {state.winner.includes(human.role) ? ' —— 胜利!' : ' —— 落败'}
-              </div>
-              <button className="btn btn-primary" onClick={onRestart}>再来一局</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {error && <div className="toast">{error}</div>}
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
