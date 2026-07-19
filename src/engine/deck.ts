@@ -50,6 +50,25 @@ const SPECS: Array<{ name: CardName; suit: Suit; ranks: number[] }> = [
   { name: 'jianma', suit: 'heart', ranks: [5] },
   { name: 'jianma', suit: 'spade', ranks: [13] },
   { name: 'jianma', suit: 'diamond', ranks: [13] },
+  // 军争篇
+  { name: 'huosha', suit: 'heart', ranks: [4, 7, 10] },
+  { name: 'huosha', suit: 'diamond', ranks: [4, 5] },
+  { name: 'leisha', suit: 'spade', ranks: [4, 5] },
+  { name: 'leisha', suit: 'club', ranks: [5, 6, 8] },
+  { name: 'jiu', suit: 'spade', ranks: [3, 9] },
+  { name: 'jiu', suit: 'club', ranks: [3, 9] },
+  { name: 'jiu', suit: 'diamond', ranks: [9] },
+  { name: 'huogong', suit: 'heart', ranks: [2, 3] },
+  { name: 'huogong', suit: 'diamond', ranks: [12] },
+  { name: 'tiesuo', suit: 'spade', ranks: [11, 12] },
+  { name: 'tiesuo', suit: 'club', ranks: [10, 11, 12, 13] },
+  { name: 'bingliang', suit: 'spade', ranks: [10] },
+  { name: 'bingliang', suit: 'club', ranks: [4] },
+  { name: 'tengjia', suit: 'spade', ranks: [2] },
+  { name: 'tengjia', suit: 'club', ranks: [2] },
+  { name: 'baiyin', suit: 'club', ranks: [1] },
+  { name: 'zhuque', suit: 'diamond', ranks: [1] },
+  { name: 'gudingdao', suit: 'spade', ranks: [1] },
 ];
 
 export function buildDeck(): Record<number, Card> {
@@ -82,9 +101,13 @@ export function equipSlotOf(name: CardName): EquipSlot | null {
     case 'guanshi':
     case 'fangtian':
     case 'qilin':
+    case 'zhuque':
+    case 'gudingdao':
       return 'weapon';
     case 'baguazhen':
     case 'renwang':
+    case 'tengjia':
+    case 'baiyin':
       return 'armor';
     case 'jiama':
       return 'horsePlus';
@@ -104,7 +127,20 @@ export const WEAPON_RANGE: Partial<Record<CardName, number>> = {
   guanshi: 3,
   fangtian: 4,
   qilin: 5,
+  zhuque: 4,
+  gudingdao: 2,
 };
+
+// 三种杀(普通/火/雷)
+export function isShaCard(name: CardName): boolean {
+  return name === 'sha' || name === 'huosha' || name === 'leisha';
+}
+
+export function shaElement(name: CardName): 'fire' | 'thunder' | undefined {
+  if (name === 'huosha') return 'fire';
+  if (name === 'leisha') return 'thunder';
+  return undefined;
+}
 
 export function isEquip(name: CardName): boolean {
   return equipSlotOf(name) !== null;

@@ -3,9 +3,19 @@ import { buildDeck } from './deck';
 import { ALL_GENERAL_IDS, GENERALS } from './generals';
 import { shuffled } from './rng';
 
+export type PlayerCount = 4 | 5 | 8;
+
 export interface GameConfig {
   seed: number;
+  playerCount?: PlayerCount;
 }
+
+// 标准身份场配置
+const ROLE_SETS: Record<PlayerCount, Role[]> = {
+  4: ['lord', 'loyalist', 'rebel', 'spy'],
+  5: ['lord', 'loyalist', 'rebel', 'rebel', 'spy'],
+  8: ['lord', 'loyalist', 'loyalist', 'rebel', 'rebel', 'rebel', 'rebel', 'spy'],
+};
 
 export function buildInitialState(config: GameConfig): GameState {
   const cards = buildDeck();
@@ -24,11 +34,12 @@ export function buildInitialState(config: GameConfig): GameState {
     eventLog: [],
   };
 
-  const roles = shuffled<Role>(state, ['lord', 'loyalist', 'rebel', 'spy']);
-  const generals = shuffled(state, ALL_GENERAL_IDS).slice(0, 4);
+  const count = config.playerCount ?? 4;
+  const roles = shuffled<Role>(state, [...ROLE_SETS[count]]);
+  const generals = shuffled(state, ALL_GENERAL_IDS).slice(0, count);
 
   const players: PlayerState[] = [];
-  for (let seat = 0; seat < 4; seat++) {
+  for (let seat = 0; seat < count; seat++) {
     const general = generals[seat];
     const role = roles[seat];
     const maxHp = GENERALS[general].hp + (role === 'lord' ? 1 : 0);

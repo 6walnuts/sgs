@@ -34,6 +34,7 @@ export function Seat({
       onClick={targetable ? onTarget : undefined}
     >
       <div className="seat-header">
+        <span className="seat-no">{p.seat + 1}号</span>
         <span className="seat-general">{GENERAL_NAMES[p.general]}</span>
         {pid === humanId && <span className="seat-you">你</span>}
         <span className={roleVisible ? `role role-${p.role}` : 'role role-hidden'}>
@@ -55,7 +56,8 @@ export function Seat({
           </div>
           <div className="seat-info">
             <span>手牌 {p.hand.length}</span>
-            {!p.alive && <span className="dead-tag">阵亡</span>}
+            {p.chained && <span className="chain-tag">连环</span>}
+        {!p.alive && <span className="dead-tag">阵亡</span>}
             {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
           </div>
         </div>

@@ -5,7 +5,7 @@ import type { GameState, PendingRequest, PlayerId, ResponseData } from '../engin
 import { isBlack, isRed } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
-import { OPTION_LABELS, SKILL_NAMES, describeRequest, playerLabel } from './text';
+import { OPTION_LABELS, SKILL_NAMES, describeRequest, playerLabel, seatLabel } from './text';
 
 const TIMEOUT_SECONDS = 20;
 
@@ -21,7 +21,17 @@ function respondCandidates(
   const skills = GENERALS[p.general].skills;
   const out: CandidateCard[] = [];
   for (const id of p.hand) {
-    if (s.cards[id].name === req.pattern) out.push({ cardId: id });
+    const name = s.cards[id].name;
+    const matches = req.pattern === 'sha'
+      ? (name === 'sha' || name === 'huosha' || name === 'leisha')
+      : name === req.pattern;
+    if (matches) out.push({ cardId: id });
+  }
+  // 濒死自救可用酒
+  if (req.pattern === 'tao' && req.reason.kind === 'dying' && req.reason.who === p.id) {
+    for (const id of p.hand) {
+      if (s.cards[id].name === 'jiu') out.push({ cardId: id });
+    }
   }
   if (req.pattern === 'sha') {
     if (skills.includes('wusheng')) {
@@ -175,7 +185,7 @@ export function PromptDialog({
                   className={pickedPlayers.includes(pid) ? 'btn btn-skill btn-skill-on' : 'btn'}
                   onClick={() => toggle(pid)}
                 >
-                  {playerLabel(state, pid, req.player)}
+                  {seatLabel(state, pid)}·{playerLabel(state, pid, req.player)}
                 </button>
               ))}
             </div>

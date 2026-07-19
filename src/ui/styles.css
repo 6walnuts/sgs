@@ -322,3 +322,45 @@ body {
   padding: 6px;
   margin-bottom: 4px;
 }
+
+.chain-tag { color: #7ec8e3; font-weight: 700; }
+
+/* ---------- 座位号 / 出牌展示板 / 多人局布局 ---------- */
+
+.seat-no {
+  background: #1a2f23;
+  color: #d8b84a;
+  border: 1px solid #4a6a55;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.seats-top {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.table-center {
+  flex-direction: column;
+  gap: 6px;
+}
+.table-stats { display: flex; align-items: center; gap: 12px; }
+
+.billboard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px;
+  background: #17301f;
+  border: 1px solid #d8b84a66;
+  border-radius: 10px;
+  animation: billboard-pop 0.45s ease-out;
+}
+.billboard-text { color: #f0e6c8; font-size: 14px; font-weight: 600; }
+
+@keyframes billboard-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}

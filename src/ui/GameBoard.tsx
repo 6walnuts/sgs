@@ -8,7 +8,7 @@ import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
-import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES } from './text';
+import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
 
 type ActiveSkill =
   | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
@@ -36,7 +36,10 @@ function targetsNeeded(
     return fangtian && lastHand ? [1, 3] : [1, 1];
   }
   if (name === 'jiedao') return [2, 2];
-  return ['guohe', 'shunshou', 'juedou', 'lebusishu'].includes(name) ? [1, 1] : [0, 0];
+  if (name === 'tiesuo') return [0, 2]; // 0 = 重铸
+  if (['huosha', 'leisha'].includes(name)) return [1, 1];
+  return ['guohe', 'shunshou', 'juedou', 'lebusishu', 'huogong', 'bingliang'].includes(name)
+    ? [1, 1] : [0, 0];
 }
 
 // 技能需要选择的牌数:[最少, 最多]
@@ -50,6 +53,19 @@ function cardsNeeded(skill: ActiveSkill): [number, number] {
     case 'fanjian': return [0, 0];
     default: return [1, 1];
   }
+}
+
+// 确认按钮文案随所选动作变化(铁索无目标=重铸,技能显示技能名)
+function confirmLabel(
+  state: GameState, skill: ActiveSkill | null, cardIds: number[], targets: string[],
+): string {
+  if (skill) return `发动${SKILL_NAMES[skill]}`;
+  if (cardIds.length === 1) {
+    const name = state.cards[cardIds[0]].name;
+    if (name === 'tiesuo' && targets.length === 0) return '重铸';
+    if (name === 'jiu') return '使用酒';
+  }
+  return '出牌';
 }
 
 function multiSelect(skill: ActiveSkill | null): boolean {
@@ -136,6 +152,21 @@ export function GameBoard({
     }
   };
 
+  // 出牌展示板:最近一条卡牌事件(带动画,方便看清场上局势)
+  let billboard: { key: number; text: string; cardId?: number } | null = null;
+  for (let i = state.eventLog.length - 1; i >= 0 && i >= state.eventLog.length - 12; i--) {
+    const ev = state.eventLog[i];
+    if (ev.type === 'cardPlayed' || ev.type === 'cardResponded'
+        || ev.type === 'judge' || ev.type === 'cardRevealed') {
+      billboard = { key: i, text: describeEvent(state, ev, humanId) ?? '', cardId: ev.cardId };
+      break;
+    }
+    if (ev.type === 'damage' || ev.type === 'nullified' || ev.type === 'phaseSkipped') {
+      billboard = { key: i, text: describeEvent(state, ev, humanId) ?? '' };
+      break;
+    }
+  }
+
   const otherSeats = state.players
     .filter((p) => p.id !== humanId)
     .sort((a, b) => {
@@ -163,11 +194,21 @@ export function GameBoard({
         </div>
 
         <div className="table-center">
-          <span>牌堆 {state.drawPile.length}</span>
-          <span>弃牌堆 {state.discardPile.length}</span>
-          {state.discardPile.slice(-4).map((id) => (
-            <CardChip key={id} state={state} cardId={id} small />
-          ))}
+          <div className="table-stats">
+            <span>牌堆 {state.drawPile.length}</span>
+            <span>弃牌堆 {state.discardPile.length}</span>
+            {state.discardPile.slice(-3).map((id) => (
+              <CardChip key={id} state={state} cardId={id} small />
+            ))}
+          </div>
+          {billboard && (
+            <div className="billboard" key={billboard.key}>
+              {billboard.cardId !== undefined && billboard.cardId > 0 && (
+                <CardChip state={state} cardId={billboard.cardId} />
+              )}
+              <span className="billboard-text">{billboard.text}</span>
+            </div>
+          )}
         </div>
 
         <div className="human-area">
@@ -215,7 +256,7 @@ export function GameBoard({
                 </button>
               ))}
               <button className="btn btn-primary" disabled={!canConfirm} onClick={confirm}>
-                出牌
+                {confirmLabel(state, selSkill, selCards, selTargets)}
               </button>
               <button
                 className="btn"

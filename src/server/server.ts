@@ -41,6 +41,7 @@ class Room {
   phase: 'lobby' | 'playing' = 'lobby';
   members: Member[] = [];
   state: GameState | null = null;
+  playerCount: 4 | 5 | 8 = 4;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -51,7 +52,7 @@ class Room {
 
   join(ws: WebSocket, name: string): Member | string {
     if (this.phase !== 'lobby') return '对局已开始,无法加入';
-    if (this.members.length >= 4) return '房间已满';
+    if (this.members.length >= this.playerCount) return '房间已满';
     const member: Member = {
       token: randomUUID(),
       name: name.trim().slice(0, 12) || '玩家',
@@ -105,7 +106,10 @@ class Room {
     if (!member.isHost) return '只有房主可以开始游戏';
     if (this.phase === 'playing' && this.state && !this.state.winner) return '对局进行中';
     this.phase = 'playing';
-    this.state = createGame({ seed: randomBytes(4).readUInt32BE(0) }).state;
+    this.state = createGame({
+      seed: randomBytes(4).readUInt32BE(0),
+      playerCount: this.playerCount,
+    }).state;
     this.broadcastRoom();
     this.broadcastSync();
     this.pump();
@@ -176,7 +180,10 @@ class Room {
       seat: m.seat, name: m.name, connected: m.ws !== null, isHost: m.isHost,
     }));
     for (const m of this.members) {
-      send(m.ws, { type: 'room', roomId: this.id, phase: this.phase, you: m.seat, members });
+      send(m.ws, {
+        type: 'room', roomId: this.id, phase: this.phase, you: m.seat,
+        playerCount: this.playerCount, members,
+      });
     }
   }
 
@@ -196,7 +203,7 @@ class Room {
 
 export function createServer(options: ServerOptions) {
   const opts = {
-    aiDelayMs: options.aiDelayMs ?? 600,
+    aiDelayMs: options.aiDelayMs ?? 900,
     humanTimeoutMs: options.humanTimeoutMs ?? 45000,
     offlineTimeoutMs: options.offlineTimeoutMs ?? 3000,
   };
@@ -220,6 +227,7 @@ export function createServer(options: ServerOptions) {
           let id = makeRoomId();
           while (rooms.has(id)) id = makeRoomId();
           const room = new Room(id, opts, (r) => rooms.delete(r.id));
+          if (msg.playerCount === 5 || msg.playerCount === 8) room.playerCount = msg.playerCount;
           rooms.set(id, room);
           const member = room.join(ws, msg.name);
           if (typeof member === 'string') send(ws, { type: 'error', message: member });

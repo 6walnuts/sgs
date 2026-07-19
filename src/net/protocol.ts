@@ -11,7 +11,7 @@ export interface MemberInfo {
 }
 
 export type ClientMessage =
-  | { type: 'create-room'; name: string }
+  | { type: 'create-room'; name: string; playerCount?: 4 | 5 | 8 }
   | { type: 'join-room'; roomId: string; name: string }
   | { type: 'rejoin'; roomId: string; token: string }
   | { type: 'start-game' }
@@ -19,7 +19,8 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: 'welcome'; roomId: string; token: string; seat: number }
-  | { type: 'room'; roomId: string; phase: 'lobby' | 'playing'; you: number; members: MemberInfo[] }
+  | { type: 'room'; roomId: string; phase: 'lobby' | 'playing'; you: number;
+      playerCount: number; members: MemberInfo[] }
   | { type: 'sync'; you: PlayerId; state: GameState } // state 已按 you 的视角过滤
   | { type: 'error'; message: string };
 

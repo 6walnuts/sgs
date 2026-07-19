@@ -140,6 +140,7 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
   // 记录移动前的手牌/装备归属,用于连营、枭姬触发
   const handOwners = new Map<PlayerId, number>();
   const equipLoss = new Map<PlayerId, number>();
+  const baiyinLosers: PlayerId[] = [];
   for (const id of ids) {
     const z = findZone(s, id);
     if (z.zone === 'hand' && z.player) {
@@ -147,6 +148,7 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
     }
     if (z.zone === 'equip' && z.player && !(to.zone === 'equip' && to.player === z.player)) {
       equipLoss.set(z.player, (equipLoss.get(z.player) ?? 0) + 1);
+      if (card(s, id).name === 'baiyin') baiyinLosers.push(z.player);
     }
     removeFrom(s, id, z);
   }
@@ -171,6 +173,21 @@ export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string)
       }
     }
   }
+  // 白银狮子:失去该装备时回复 1 点体力
+  for (const pid of baiyinLosers) {
+    const p = player(s, pid);
+    if (p.alive && p.hp < p.maxHp) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'baiyin' });
+      heal(ctx, pid, 1);
+    }
+  }
+}
+
+// 铁索连环:切换横置状态
+export function toggleChain(ctx: Ctx, pid: PlayerId): void {
+  const p = player(ctx.s, pid);
+  p.chained = !p.chained;
+  emit(ctx, { type: 'chained', player: pid, chained: !!p.chained });
 }
 
 export function moveCard(ctx: Ctx, id: CardId, to: ZoneRef, reason?: string): void {

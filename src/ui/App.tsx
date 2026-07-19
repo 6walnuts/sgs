@@ -5,9 +5,11 @@ import { NetGame, defaultWsUrl } from '../game/netGame';
 import type { NetIntent } from '../game/netGame';
 import { GameBoard } from './GameBoard';
 
+type PlayerCount = 4 | 5 | 8;
+
 type Screen =
   | { kind: 'menu' }
-  | { kind: 'local' }
+  | { kind: 'local'; playerCount: PlayerCount }
   | { kind: 'online'; intent: NetIntent };
 
 export function App() {
@@ -17,12 +19,12 @@ export function App() {
     case 'menu':
       return (
         <Menu
-          onLocal={() => setScreen({ kind: 'local' })}
+          onLocal={(playerCount) => setScreen({ kind: 'local', playerCount })}
           onOnline={(intent) => setScreen({ kind: 'online', intent })}
         />
       );
     case 'local':
-      return <LocalPlay onExit={toMenu} />;
+      return <LocalPlay playerCount={screen.playerCount} onExit={toMenu} />;
     case 'online':
       return <OnlinePlay intent={screen.intent} onExit={toMenu} />;
   }
@@ -31,17 +33,30 @@ export function App() {
 // ---------- 主菜单 ----------
 
 function Menu({ onLocal, onOnline }: {
-  onLocal: () => void;
+  onLocal: (playerCount: PlayerCount) => void;
   onOnline: (intent: NetIntent) => void;
 }) {
   const [name, setName] = useState('玩家');
   const [roomId, setRoomId] = useState('');
+  const [playerCount, setPlayerCount] = useState<PlayerCount>(4);
   return (
     <div className="menu">
       <h1 className="menu-title">三国杀</h1>
       <div className="menu-card">
-        <button className="btn btn-primary menu-btn" onClick={onLocal}>
-          单机游戏(1 人 + 3 AI)
+        <div className="menu-row">
+          <label>人数</label>
+          {([4, 5, 8] as PlayerCount[]).map((n) => (
+            <button
+              key={n}
+              className={playerCount === n ? 'btn btn-skill btn-skill-on' : 'btn'}
+              onClick={() => setPlayerCount(n)}
+            >
+              {n} 人局
+            </button>
+          ))}
+        </div>
+        <button className="btn btn-primary menu-btn" onClick={() => onLocal(playerCount)}>
+          单机游戏(1 人 + {playerCount - 1} AI)
         </button>
         <div className="menu-row">
           <label>昵称</label>
@@ -49,7 +64,7 @@ function Menu({ onLocal, onOnline }: {
         </div>
         <button
           className="btn btn-primary menu-btn"
-          onClick={() => onOnline({ kind: 'create', name })}
+          onClick={() => onOnline({ kind: 'create', name, playerCount })}
         >
           创建联机房间
         </button>
@@ -77,12 +92,13 @@ function Menu({ onLocal, onOnline }: {
 
 // ---------- 单机 ----------
 
-function LocalPlay({ onExit }: { onExit: () => void }) {
+function LocalPlay({ playerCount, onExit }: { playerCount: PlayerCount; onExit: () => void }) {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   return (
     <LocalSession
       key={seed}
       seed={seed}
+      playerCount={playerCount}
       onRestart={() => setSeed(Math.floor(Math.random() * 1e9))}
       onExit={onExit}
     />
@@ -99,12 +115,13 @@ function useToast(): [string | null, (msg: string) => void] {
   return [toast, setToast];
 }
 
-function LocalSession({ seed, onRestart, onExit }: {
+function LocalSession({ seed, playerCount, onRestart, onExit }: {
   seed: number;
+  playerCount: PlayerCount;
   onRestart: () => void;
   onExit: () => void;
 }) {
-  const game = useMemo(() => new LocalGame(seed), [seed]);
+  const game = useMemo(() => new LocalGame(seed, playerCount), [seed, playerCount]);
   const [state, setState] = useState<GameState>(game.state);
   const [toast, setToast] = useToast();
 
@@ -204,7 +221,7 @@ function Lobby({ net, toast, onExit }: {
         {room && (
           <>
             <div className="lobby-roomid">
-              房间号:<strong>{room.roomId}</strong>
+              房间号:<strong>{room.roomId}</strong>({room.playerCount} 人局)
               <span className="dialog-hint">(告诉朋友这个代码加入)</span>
             </div>
             <div className="lobby-members">
@@ -215,7 +232,7 @@ function Lobby({ net, toast, onExit }: {
                   {!m.connected && <span className="dead-tag">掉线</span>}
                 </div>
               ))}
-              {Array.from({ length: 4 - room.members.length }, (_, i) => (
+              {Array.from({ length: room.playerCount - room.members.length }, (_, i) => (
                 <div key={`ai-${i}`} className="lobby-member lobby-ai">
                   <span>AI 玩家</span>
                 </div>
