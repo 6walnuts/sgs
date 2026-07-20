@@ -116,6 +116,38 @@ body {
 .skill-tag {
   font-size: 11px; color: #b9d2c2; border: 1px solid #4a6a55;
   border-radius: 6px; padding: 0 5px;
+  position: relative;
+}
+/* 技能说明悬浮提示(纯 CSS) */
+.skill-tag[data-tip]:hover { border-color: #d8b84a; cursor: help; }
+.skill-tag[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 5px);
+  z-index: 60;
+  width: max-content;
+  max-width: 240px;
+  background: #10221a;
+  color: #e8e2d0;
+  border: 1px solid #d8b84a;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  box-shadow: 0 4px 12px #000a;
+  pointer-events: none;
+}
+/* 底部区域(玩家自己)向上弹出,避免超出屏幕 */
+.human-area .skill-tag[data-tip]:hover::after {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+/* 右列座位向左对齐,避免溢出到日志栏 */
+.seats-right .skill-tag[data-tip]:hover::after {
+  left: auto;
+  right: 0;
 }
 
 .seat-hp { margin-top: 6px; font-size: 14px; letter-spacing: 2px; }
@@ -212,13 +244,22 @@ body {
 
 /* ---------- 日志 ---------- */
 
-/* 右侧栏:身份分布 + 对局记录 */
+/* 右侧栏:身份分布 + 退出 + 对局记录 */
 .side {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
 }
+
+.side-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-exit { flex-shrink: 0; }
 
 .role-dist {
   background: #20382a;
@@ -228,7 +269,7 @@ body {
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  flex: 1;
 }
 .role-dist-label { font-size: 12px; color: #b9c9be; margin-right: 3px; }
 .role-out { opacity: 0.3; filter: grayscale(1); text-decoration: line-through; }

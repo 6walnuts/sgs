@@ -7,7 +7,7 @@ import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { GeneralPortrait } from './portraits';
 import {
-  FACTION_NAMES, GENERAL_NAMES, OPTION_LABELS, SKILL_NAMES,
+  FACTION_NAMES, GENERAL_NAMES, OPTION_LABELS, SKILL_DESCS, SKILL_NAMES,
   describeRequest, playerLabel, seatLabel,
 } from './text';
 
@@ -296,7 +296,9 @@ export function PromptDialog({
                   <div className="general-pick-hp">{'❤'.repeat(def.hp)}</div>
                   <div className="general-pick-skills">
                     {def.skills.map((sk) => (
-                      <span key={sk} className="skill-tag">{SKILL_NAMES[sk]}</span>
+                      <span key={sk} className="skill-tag" data-tip={SKILL_DESCS[sk]}>
+                        {SKILL_NAMES[sk]}
+                      </span>
                     ))}
                   </div>
                 </button>

@@ -445,16 +445,6 @@ export function GameBoard({
                 {state.discardPile.slice(-3).map((id) => (
                   <CardChip key={id} state={state} cardId={id} small />
                 ))}
-                {onExit && (
-                  <button
-                    className="btn btn-mini"
-                    onClick={() => {
-                      if (window.confirm('确定退出当前对局吗?')) onExit();
-                    }}
-                  >
-                    退出
-                  </button>
-                )}
               </div>
               {billboard && (
                 <div className="billboard" key={billboard.key}>
@@ -570,7 +560,19 @@ export function GameBoard({
       </div>
 
       <div className="side">
-        <RoleDist state={state} />
+        <div className="side-top">
+          <RoleDist state={state} />
+          {onExit && (
+            <button
+              className="btn btn-mini btn-exit"
+              onClick={() => {
+                if (window.confirm('确定退出当前对局吗?')) onExit();
+              }}
+            >
+              退出
+            </button>
+          )}
+        </div>
         <Log state={state} humanId={humanId} />
       </div>
 

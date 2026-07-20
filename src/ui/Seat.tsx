@@ -1,5 +1,5 @@
 import type { GameState, PlayerId } from '../engine/types';
-import { GENERAL_NAMES, ROLE_NAMES, SKILL_NAMES } from './text';
+import { GENERAL_NAMES, ROLE_NAMES, SKILL_DESCS, SKILL_NAMES } from './text';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { GeneralPortrait } from './portraits';
@@ -48,12 +48,25 @@ export function Seat({
           : <GeneralPortrait general={p.general} />}
         <div className="seat-col">
           <div className="seat-skills">
-            {!p.unpicked && [...new Set(GENERALS[p.general].skills.map((sk) => SKILL_NAMES[sk]))]
-              .map((name) => (
-                <span key={name} className="skill-tag">{name}</span>
-              ))}
+            {!p.unpicked && (() => {
+              const seen = new Set<string>();
+              return GENERALS[p.general].skills
+                .filter((sk) => {
+                  const name = SKILL_NAMES[sk];
+                  if (seen.has(name)) return false;
+                  seen.add(name);
+                  return true;
+                })
+                .map((sk) => (
+                  <span key={sk} className="skill-tag" data-tip={SKILL_DESCS[sk]}>
+                    {SKILL_NAMES[sk]}
+                  </span>
+                ));
+            })()}
             {p.huashenSkill && (
-              <span className="skill-tag">化:{SKILL_NAMES[p.huashenSkill]}</span>
+              <span className="skill-tag" data-tip={SKILL_DESCS[p.huashenSkill]}>
+                化:{SKILL_NAMES[p.huashenSkill]}
+              </span>
             )}
           </div>
           <div className="seat-hp">
