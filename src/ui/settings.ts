@@ -9,6 +9,7 @@ export interface GameSettings {
   portraitStyle: PortraitStyle; // cartoon=内置卡通插画;card=经典卡牌头像(用户自备图片)
   godGenerals: boolean; // 神武将加入武将池(登场自选势力,不进主公候选)
   bgm: boolean; // 背景音乐(自备 /audio/bgm.mp3,缺省用合成古风循环)
+  cardVoice: boolean; // 卡牌语音(内置官方复刻音效,缺文件时浏览器语音合成兜底)
 }
 
 const SETTINGS_KEY = 'sgs-settings';
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   portraitStyle: 'cartoon',
   godGenerals: false,
   bgm: true,
+  cardVoice: true,
 };
 
 let cache: GameSettings | null = null;
