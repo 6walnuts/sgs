@@ -186,7 +186,11 @@ export function PromptDialog({
             ? [...human.hand, ...Object.values(human.equips).filter((x): x is number => x !== undefined)]
             : human.hand
         ).filter((id) => !exclude.includes(id));
+        // 火攻:只有与展示牌同花色的手牌才能弃置,其余置灰不可选
+        const usable = (id: number) => req.reason.kind !== 'huogong-match'
+          || state.cards[id]?.suit === req.reason.suit;
         const toggle = (id: number) => {
+          if (!usable(id)) return;
           setPicked((cur) => (cur.includes(id)
             ? cur.filter((x) => x !== id)
             : cur.length < req.max ? [...cur, id] : cur));
@@ -200,7 +204,8 @@ export function PromptDialog({
                   state={state}
                   cardId={id}
                   selected={picked.includes(id)}
-                  onClick={() => toggle(id)}
+                  dimmed={!usable(id)}
+                  onClick={usable(id) ? () => toggle(id) : undefined}
                 />
               ))}
             </div>

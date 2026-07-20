@@ -2293,6 +2293,7 @@ const aoe: FrameHandler<AoeFrame> = {
           }
         }
         if (f.idx >= f.queue.length) {
+          if (f.effName === 'wugu') s.wugu = undefined; // 公示结束
           // 五谷剩余的牌进弃牌堆
           for (const id of f.shownIds ?? []) discardIfProcessing(ctx, id);
           for (const id of f.extraCardIds ?? []) discardIfProcessing(ctx, id);
@@ -2452,6 +2453,7 @@ const aoe: FrameHandler<AoeFrame> = {
         const cid = resp.cardIds[0];
         if (!f.shownIds!.includes(cid)) fail('只能选择亮出的牌');
         moveCard(ctx, cid, { zone: 'hand', player: tgtId }, 'wugu');
+        if (s.wugu) s.wugu.taken[cid] = tgtId; // 公示:这张被谁选走
         f.shownIds = f.shownIds!.filter((id) => id !== cid);
         f.idx++;
         f.step = 'next';

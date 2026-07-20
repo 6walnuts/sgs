@@ -10,7 +10,7 @@ import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
-import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
+import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent, playerLabel } from './text';
 import { isBgmOn, startBgm, stopBgm } from './bgm';
 import { saveSettings } from './settings';
 import type { Role } from '../engine/types';
@@ -517,6 +517,22 @@ export function GameBoard({
                     <CardChip state={state} cardId={billboard.cardId} />
                   )}
                   <span className="billboard-text">{billboard.text}</span>
+                </div>
+              )}
+              {state.wugu && (
+                <div className="wugu-board">
+                  <span className="wugu-title">五谷丰登</span>
+                  {state.wugu.cardIds.map((id) => {
+                    const taker = state.wugu!.taken[id];
+                    return (
+                      <div key={id} className="wugu-slot">
+                        <CardChip state={state} cardId={id} dimmed={taker !== undefined} />
+                        <span className="wugu-taker">
+                          {taker ? playerLabel(state, taker, humanId) : ' '}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

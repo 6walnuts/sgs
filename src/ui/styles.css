@@ -243,6 +243,21 @@ body {
 
 .hint { font-size: 13px; color: #d8b84a; }
 
+/* 五谷丰登公示区:所有人可见亮出的牌,被选走的置灰并标注取牌人 */
+.wugu-board {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #20382a;
+  border: 1px solid #d8b84a88;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.wugu-title { color: #d8b84a; font-weight: 700; font-size: 14px; align-self: center; }
+.wugu-slot { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wugu-taker { font-size: 11px; color: #b9c9be; min-height: 15px; }
+
 /* ---------- 日志 ---------- */
 
 /* 右侧栏:身份分布 + 退出 + 对局记录 */

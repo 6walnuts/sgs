@@ -796,6 +796,8 @@ export interface GameState {
     pattern: 'shan' | 'sha' | 'tao' | 'wuxie'; queue: PlayerId[]; idx: number;
     challenger?: PlayerId };
   guhuoSpentId?: number; // 该请求已声明过蛊惑且被识破,不能再次声明
+  // 五谷丰登结算中:亮出的牌与逐轮被选走的情况,对所有玩家公开展示
+  wugu?: { cardIds: CardId[]; taken: Record<number, PlayerId> };
   nextRequestId: number;
   winner: Role[] | null;
   eventLog: GameEvent[];

@@ -586,6 +586,7 @@ function playAs(ctx: Ctx, p: PlayerState, cardId: number, name: CardName, target
         shown.push(id);
         emit(ctx, { type: 'cardRevealed', player: p.id, cardId: id, reason: 'wugu' });
       }
+      s.wugu = { cardIds: [...shown], taken: {} }; // 公示牌面与选牌进度
       pushFrame(ctx, {
         type: 'aoe', step: 'next', effName: 'wugu', cardId, source: p.id,
         queue, idx: 0, shownIds: shown,

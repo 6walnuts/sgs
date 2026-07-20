@@ -86,6 +86,26 @@ describe('群体锦囊', () => {
     expect(P(s, 'p3').hand).toContain(shown[3]);
     expect(s.discardPile).toContain(wg);
   });
+
+  it('五谷丰登:公示亮出的牌与被选走的情况,结算完清空', () => {
+    let s = newGame();
+    clearHands(s);
+    rigPlay(s, 'p0');
+    const wg = give(s, 'p0', 'wugu');
+    s = act(s, { kind: 'play-card', cardId: wg, targets: [] });
+    const shown = s.wugu!.cardIds;
+    expect(shown).toHaveLength(4);
+    expect(s.wugu!.taken).toEqual({});
+    s = act(s, { kind: 'cards', cardIds: [shown[0]] });
+    expect(s.wugu!.taken[shown[0]]).toBe('p0'); // 被选走的牌标注取牌人
+    expect(s.wugu!.cardIds).toEqual(shown); // 原牌面保持完整供展示
+    for (let i = 1; i < 4; i++) {
+      while (s.pendingRequest?.type === 'respond-card') s = act(s, { kind: 'decline' });
+      s = act(s, { kind: 'cards', cardIds: [shown[i]] });
+    }
+    while (s.pendingRequest?.type === 'respond-card') s = act(s, { kind: 'decline' });
+    expect(s.wugu).toBeUndefined(); // 结算结束即撤下公示
+  });
 });
 
 describe('借刀杀人与闪电', () => {
