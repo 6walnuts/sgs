@@ -632,19 +632,22 @@ export function GameBoard({
       <div className="side">
         <div className="side-top">
           <RoleDist state={state} />
-          <BgmToggle />
-          {onExit && (
-            <button
-              className="btn btn-mini btn-exit"
-              onClick={() => {
-                if (window.confirm('确定退出当前对局吗?')) onExit();
-              }}
-            >
-              退出
-            </button>
-          )}
         </div>
         <Log state={state} humanId={humanId} />
+      </div>
+
+      <div className="corner-btns">
+        <BgmToggle />
+        {onExit && (
+          <button
+            className="btn btn-mini btn-exit"
+            onClick={() => {
+              if (window.confirm('确定退出当前对局吗?')) onExit();
+            }}
+          >
+            退出
+          </button>
+        )}
       </div>
 
       {needDialog && req && (

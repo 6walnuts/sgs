@@ -258,9 +258,19 @@ body {
   align-items: flex-start;
   gap: 8px;
   flex-shrink: 0;
+  padding-right: 100px; /* 给右上角固定按钮(音乐/退出)留位置 */
 }
 
-.btn-exit { flex-shrink: 0; }
+/* 局内快捷按钮(音乐/退出):固定在屏幕右上角,任何窗口宽度下都可见 */
+.corner-btns {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 15; /* 高于弹窗遮罩(10),弹窗打开时也能点 */
+}
+.corner-btns .btn { box-shadow: 0 2px 8px #0008; }
 
 .role-dist {
   background: #20382a;
@@ -301,7 +311,10 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 10;
+  /* 只挡视线不挡鼠标:弹窗打开时仍可悬浮查看各座位的技能说明 */
+  pointer-events: none;
 }
+.dialog-backdrop > * { pointer-events: auto; }
 
 .dialog {
   background: #24402f;
