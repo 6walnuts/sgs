@@ -6,13 +6,15 @@ import type { CardName, GameState, PlayerId, PlayerState, ResponseData, SkillNam
 import { GENERALS } from '../engine/generals';
 import { ROLE_SETS } from '../engine/setup';
 import { shaLimit, shaUsed } from '../engine/rules';
+import { isShaCard } from '../engine/deck';
 import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
 import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent, playerLabel } from './text';
 import { isBgmOn, startBgm, stopBgm } from './bgm';
-import { playCardVoice } from './voice';
+import { playCardVoice, playDeathVoice, playSkillVoice, playSystemSound } from './voice';
+import { FX_FRAMES } from './fxManifest';
 import { loadSettings, saveSettings } from './settings';
 import type { Role } from '../engine/types';
 
@@ -332,30 +334,96 @@ export function GameBoard({
     resetSelection();
   }, [req?.id, resetSelection]);
 
-  // 卡牌语音:新出现的出牌/打出/转化事件报牌名(按使用者性别选音源)
+  // 音效与特效调度:扫描新出现的事件,派发卡牌/技能/阵亡语音、受伤音效
+  // 与座位特效(帧动画)。人声每批只播一条(技能台词优先于报牌名)。
   const voicedRef = useRef(0);
+  const fxKeyRef = useRef(1);
+  const [fxList, setFxList] = useState<{ key: number; pid: PlayerId; name: string }[]>([]);
+  const removeFx = useCallback((key: number) => {
+    setFxList((cur) => cur.filter((x) => x.key !== key));
+  }, []);
   useEffect(() => {
     const from = voicedRef.current;
     voicedRef.current = state.eventLog.length;
-    if (from === 0 || !loadSettings().cardVoice) return; // 初次挂载不补播历史
-    for (let i = state.eventLog.length - 1; i >= from; i--) {
+    if (from === 0) return; // 初次挂载不补播历史
+    const sound = loadSettings().cardVoice;
+    let cardLine: { name: CardName; pid: PlayerId } | null = null;
+    let skillLine: { skill: string; pid: PlayerId } | null = null;
+    const fx: { key: number; pid: PlayerId; name: string }[] = [];
+    const burst = (pid: PlayerId, name: string) => {
+      if (FX_FRAMES[name] && fx.length < 6) fx.push({ key: fxKeyRef.current++, pid, name });
+    };
+    for (let i = from; i < state.eventLog.length; i++) {
       const ev = state.eventLog[i];
-      let name: CardName | undefined;
-      let pid: PlayerId | undefined;
-      if (ev.type === 'cardPlayed' || ev.type === 'cardResponded') {
-        name = ev.as ?? state.cards[ev.cardId]?.name;
-        pid = ev.player;
-      } else if (ev.type === 'virtualCard') {
-        name = ev.as;
-        pid = ev.player;
-      }
-      if (name && pid) {
-        const who = state.players.find((x) => x.id === pid);
-        playCardVoice(name, CARD_NAMES[name] ?? name, who ? GENERALS[who.general].gender : 'm');
-        break; // 一批事件只播最新的一条
+      if (ev.type === 'cardPlayed' || ev.type === 'cardResponded' || ev.type === 'virtualCard') {
+        const name = ev.type === 'virtualCard' ? ev.as : ev.as ?? state.cards[ev.cardId]?.name;
+        if (!name) continue;
+        cardLine = { name, pid: ev.player };
+        const targets = ev.type === 'cardResponded' ? [] : ev.targets;
+        // 出牌类特效
+        if (isShaCard(name)) {
+          const suit = ev.type !== 'virtualCard' ? state.cards[ev.cardId]?.suit : undefined;
+          const slashFx = name === 'huosha' ? 'fire_slash'
+            : name === 'leisha' ? 'thunder_slash'
+              : suit && (suit === 'heart' || suit === 'diamond') ? 'slash_red' : 'slash_black';
+          for (const t of targets) burst(t, slashFx);
+          // 武器特效:攻击者带着有专属特效的武器出杀
+          const who = state.players.find((x) => x.id === ev.player);
+          const wid = who?.equips.weapon;
+          if (wid !== undefined) burst(ev.player, state.cards[wid].name);
+        } else if (name === 'shan') {
+          burst(ev.player, 'jink');
+        } else if (name === 'tao') {
+          burst(ev.player, 'peach');
+        } else if (name === 'jiu') {
+          burst(ev.player, 'analeptic');
+        } else if (name === 'wuxie') {
+          burst(ev.player, 'skill_nullify');
+        } else if (name === 'juedou') {
+          for (const t of targets) burst(t, 'duel');
+        } else if (name === 'tiesuo') {
+          for (const t of targets) burst(t, 'chain');
+        }
+      } else if (ev.type === 'damage') {
+        burst(ev.target, 'damage');
+        if (sound) playSystemSound(`injure${1 + Math.floor(Math.random() * 3)}`);
+      } else if (ev.type === 'skillInvoked') {
+        skillLine = { skill: ev.skill, pid: ev.player };
+        // 防具特效
+        if (ev.skill === 'bagua' || ev.skill === 'bazhen') burst(ev.player, 'baguazhen');
+        else if (ev.skill === 'tengjia') burst(ev.player, 'tengjia');
+      } else if (ev.type === 'playerDied') {
+        const who = state.players.find((x) => x.id === ev.player);
+        if (sound && who) playDeathVoice(who.general);
+        skillLine = null; // 阵亡语音优先,本批不再叠技能台词
+        cardLine = null;
+      } else if (ev.type === 'chained' && ev.chained) {
+        burst(ev.player, 'chain');
       }
     }
+    if (fx.length > 0) setFxList((cur) => [...cur.slice(-8), ...fx]);
+    if (!sound) return;
+    if (skillLine) {
+      playSkillVoice(skillLine.skill, SKILL_NAMES[skillLine.skill as never] ?? skillLine.skill);
+    } else if (cardLine) {
+      const who = state.players.find((x) => x.id === cardLine!.pid);
+      playCardVoice(
+        cardLine.name,
+        CARD_NAMES[cardLine.name] ?? cardLine.name,
+        who ? GENERALS[who.general].gender : 'm',
+      );
+    }
   }, [state]);
+
+  // 终局音效:胜利/失败各播一次
+  const winPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!state.winner || winPlayedRef.current) return;
+    winPlayedRef.current = true;
+    if (!loadSettings().cardVoice) return;
+    const meWin = state.winner.includes(state.players.find((p) => p.id === humanId)!.role);
+    playSystemSound(meWin ? 'win' : 'lose', 0.6);
+  }, [state.winner, state.players, humanId]);
 
   const human = state.players.find((p) => p.id === humanId)!;
   const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards, selDeclare);
@@ -492,6 +560,8 @@ export function GameBoard({
       targetable={isMyPlay && needMax > 0 && state.players.find((p) => p.id === pid)!.alive}
       targeted={selTargets.includes(pid)}
       onTarget={() => toggleTarget(pid)}
+      fx={fxList.filter((x) => x.pid === pid)}
+      onFxDone={removeFx}
     />
   );
 
@@ -576,6 +646,8 @@ export function GameBoard({
             targetable={false}
             targeted={selTargets.includes(humanId)}
             selectedCards={selCards}
+            fx={fxList.filter((x) => x.pid === humanId)}
+            onFxDone={removeFx}
             onEquipClick={
               isMyPlay && (selSkill === 'zhiheng' || selSkill === 'jzhiheng'
                 || selSkill === 'lijian'
