@@ -21,6 +21,10 @@ export function Seat({
   const roleVisible = pid === humanId || p.roleRevealed || state.winner !== null;
   const waiting = state.pendingRequest?.player === pid;
   const equips = Object.values(p.equips).filter((x): x is number => x !== undefined);
+  // 武魂"梦魇"标记:对场上存活的神关羽造成过的伤害合计(其死亡时最多者判定)
+  const mengyan = state.players
+    .filter((x) => x.alive && x.id !== pid && GENERALS[x.general].skills.includes('wuhun'))
+    .reduce((n, x) => n + (x.damageTaken?.[pid] ?? 0), 0);
 
   return (
     <div
@@ -78,6 +82,14 @@ export function Seat({
             <span>手牌 {p.hand.length}</span>
             {p.chained && <span className="chain-tag">连环</span>}
             {p.flipped && <span className="chain-tag">翻面</span>}
+            {mengyan > 0 && (
+              <span
+                className="chain-tag mengyan-tag"
+                title="梦魇:对神关羽造成过的伤害。其死亡时,梦魇最多的角色须判定,非桃/桃园结义则死亡"
+              >
+                梦魇×{mengyan}
+              </span>
+            )}
             {!p.alive && <span className="dead-tag">阵亡</span>}
             {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
           </div>

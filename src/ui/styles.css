@@ -509,6 +509,7 @@ body {
 }
 
 .chain-tag { color: #7ec8e3; font-weight: 700; }
+.mengyan-tag { color: #c98fe8; cursor: help; } /* 武魂梦魇标记(悬浮看说明) */
 
 /* ---------- 座位号 / 出牌展示板 / 多人局布局 ---------- */
 
