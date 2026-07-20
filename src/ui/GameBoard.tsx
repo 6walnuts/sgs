@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { CardName, GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
 import { GENERALS } from '../engine/generals';
 import { ROLE_SETS } from '../engine/setup';
+import { shaLimit, shaUsed } from '../engine/rules';
 import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
@@ -49,7 +50,7 @@ type ActiveSkill =
   | 'gongxin'
   | 'tiaoxin' | 'jixi' | 'zhijian'
   | 'jrende' | 'jwusheng' | 'yijue' | 'jzhiheng' | 'jkurou' | 'jfanjian'
-  | 'jguose' | 'jqingnang' | 'qimou';
+  | 'jguose' | 'jqingnang' | 'qimou' | 'jijiang';
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -127,6 +128,7 @@ function cardsNeeded(skill: ActiveSkill): [number, number] {
     case 'xianzhen': return [0, 0];
     case 'gongxin': return [0, 0];
     case 'tiaoxin': return [0, 0];
+    case 'jijiang': return [0, 0];
     case 'jujian': return [1, 3];
     case 'qiangxi': return [0, 1]; // 可选:弃一张武器牌代替失去体力
     case 'dimeng': return [0, 99]; // 需弃两者手牌数之差的牌
@@ -358,6 +360,12 @@ export function GameBoard({
       case 'yijue': return !!human.flags.yijue;
       case 'jqingnang': return !!human.flags.qingnangOff;
       case 'qimou': return (human.usedLimit ?? []).includes('qimou');
+      case 'jijiang':
+        return human.role !== 'lord'
+          || shaUsed(human) >= shaLimit(state, human)
+          || !state.players.some(
+            (x) => x.alive && x.id !== human.id
+              && (x.faction ?? GENERALS[x.general].faction) === 'shu');
       default: return false;
     }
   };

@@ -98,6 +98,7 @@ export const SKILL_NAMES: Record<SkillName, string> = {
   jkuanggu: '狂骨', qimou: '奇谋', jtianxiang: '天香', fenji: '奋激',
   jleiji: '雷击', jguhuo: '蛊惑', chanyuan: '缠怨',
   jxiaoji: '枭姬',
+  jijiang: '激将', hujia: '护驾',
 };
 
 export const SKILL_HINTS: Record<string, string> = {
@@ -145,6 +146,7 @@ export const SKILL_HINTS: Record<string, string> = {
   jguose: '将一张方块牌当乐不思蜀使用,然后摸一张牌(每阶段一次)',
   jqingnang: '弃一张手牌令一名已受伤角色回复1点体力(每名角色限一次;弃黑色牌则本阶段失效)',
   qimou: '限定技:失去X点体力,本回合计算距离-X且可额外使用X张杀',
+  jijiang: '主公技:视为使用杀,由其他蜀势力角色代为打出(计入本回合杀的次数)',
 };
 
 // 全技能说明:座位技能标签与选将界面的悬浮提示(描述与本实现一致,含简化)
@@ -315,6 +317,8 @@ export const SKILL_DESCS: Record<string, string> = {
   jleiji: '使用或打出闪后可令一名角色判定:黑桃则其受2点雷电伤害,梅花则受1点且你回复1点体力',
   jguhuo: '扣置手牌声明为任意基本牌或非延时锦囊;质疑真牌者获得"缠怨"',
   chanyuan: '锁定技,你不能质疑蛊惑;体力为1时,你的其他技能失效',
+  jijiang: '主公技,你需要使用或打出杀时,可令其他蜀势力角色代为打出;出牌阶段也可发动视为使用杀',
+  hujia: '主公技,你需要使用或打出闪时,可令其他魏势力角色代为打出',
 };
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -481,6 +485,12 @@ export function describeRequest(s: GameState, req: PendingRequest, humanId?: Pla
           return `${label(r.source!)} 发动了乱武:对距离最近的角色使用杀,否则失去1点体力`;
         case 'tiaoxin':
           return `${label(r.target!)} 挑衅你:对其使用一张杀,否则其弃置你一张牌`;
+        case 'jijiang':
+          return r.target !== undefined
+            ? `主公 ${label(r.who!)} 发动激将:是否代其对 ${label(r.target)} 打出一张杀?`
+            : `主公 ${label(r.who!)} 发动激将:是否代其打出一张杀?`;
+        case 'hujia':
+          return `主公 ${label(r.who!)} 发动护驾:是否代其打出一张闪?`;
         case 'dying':
           return r.who === req.player
             ? '你处于濒死状态,是否使用桃?'

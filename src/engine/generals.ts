@@ -11,9 +11,9 @@ export interface GeneralDef {
 
 export const GENERALS: Record<GeneralId, GeneralDef> = {
   // 初始 8 将
-  liubei:   { id: 'liubei',   faction: 'shu', hp: 4, gender: 'm', skills: ['rende'], activeSkills: ['rende'] },
+  liubei:   { id: 'liubei',   faction: 'shu', hp: 4, gender: 'm', skills: ['rende', 'jijiang'], activeSkills: ['rende', 'jijiang'] },
   guanyu:   { id: 'guanyu',   faction: 'shu', hp: 4, gender: 'm', skills: ['wusheng'], activeSkills: ['wusheng'] },
-  caocao:   { id: 'caocao',   faction: 'wei', hp: 4, gender: 'm', skills: ['jianxiong'], activeSkills: [] },
+  caocao:   { id: 'caocao',   faction: 'wei', hp: 4, gender: 'm', skills: ['jianxiong', 'hujia'], activeSkills: [] },
   simayi:   { id: 'simayi',   faction: 'wei', hp: 3, gender: 'm', skills: ['fankui', 'guicai'], activeSkills: [] },
   sunquan:  { id: 'sunquan',  faction: 'wu',  hp: 4, gender: 'm', skills: ['zhiheng', 'jiuyuan'], activeSkills: ['zhiheng'] },
   ganning:  { id: 'ganning',  faction: 'wu',  hp: 4, gender: 'm', skills: ['qixi'], activeSkills: ['qixi'] },
@@ -89,14 +89,14 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   zuoci:             { id: 'zuoci',             faction: 'qun', hp: 3, gender: 'm', skills: ['huashen', 'xinsheng'], activeSkills: [] },
   caiwenji:          { id: 'caiwenji',          faction: 'qun', hp: 3, gender: 'f', skills: ['beige', 'duanchang'], activeSkills: [] },
   // 界限突破 · 标准包(独立武将,与原版共存)
-  jiecaocao:     { id: 'jiecaocao',     faction: 'wei', hp: 4, gender: 'm', skills: ['jjianxiong'], activeSkills: [] },
+  jiecaocao:     { id: 'jiecaocao',     faction: 'wei', hp: 4, gender: 'm', skills: ['jjianxiong', 'hujia'], activeSkills: [] },
   jiesimayi:     { id: 'jiesimayi',     faction: 'wei', hp: 3, gender: 'm', skills: ['jfankui', 'guicai'], activeSkills: [] },
   jiexiahoudun:  { id: 'jiexiahoudun',  faction: 'wei', hp: 4, gender: 'm', skills: ['jganglie'], activeSkills: [] },
   jiezhangliao:  { id: 'jiezhangliao',  faction: 'wei', hp: 4, gender: 'm', skills: ['jtuxi'], activeSkills: [] },
   jiexuchu:      { id: 'jiexuchu',      faction: 'wei', hp: 4, gender: 'm', skills: ['jluoyi'], activeSkills: [] },
   jieguojia:     { id: 'jieguojia',     faction: 'wei', hp: 3, gender: 'm', skills: ['tiandu', 'yiji'], activeSkills: [] },
   jiezhenji:     { id: 'jiezhenji',     faction: 'wei', hp: 3, gender: 'f', skills: ['jluoshen', 'qingguo'], activeSkills: [] },
-  jieliubei:     { id: 'jieliubei',     faction: 'shu', hp: 4, gender: 'm', skills: ['jrende'], activeSkills: ['jrende'] },
+  jieliubei:     { id: 'jieliubei',     faction: 'shu', hp: 4, gender: 'm', skills: ['jrende', 'jijiang'], activeSkills: ['jrende', 'jijiang'] },
   jieguanyu:     { id: 'jieguanyu',     faction: 'shu', hp: 4, gender: 'm', skills: ['jwusheng', 'yijue'], activeSkills: ['jwusheng', 'yijue'] },
   jiezhangfei:   { id: 'jiezhangfei',   faction: 'shu', hp: 4, gender: 'm', skills: ['jpaoxiao'], activeSkills: [] },
   jiezhugeliang: { id: 'jiezhugeliang', faction: 'shu', hp: 3, gender: 'm', skills: ['jguanxing', 'kongcheng'], activeSkills: [] },

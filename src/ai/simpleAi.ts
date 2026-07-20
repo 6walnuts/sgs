@@ -324,6 +324,12 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
       if (sha.length > 0) {
         return { kind: 'play-card', cardId: sha[0], targets: [inRange[0].id] };
       }
+      if (p.role === 'lord' && hasGeneralSkill(p, 'jijiang') && shaCards(s, p).length === 0
+          && s.players.some((x) => x.alive && x.id !== p.id
+            && (x.faction ?? GENERALS[x.general].faction) === 'shu'
+            && !isEnemy(s, p.role, x))) {
+        return { kind: 'use-skill', skill: 'jijiang', targets: [inRange[0].id] };
+      }
       const ws = skillVariant(p, 'wusheng');
       if (ws) {
         const red = p.hand.find((id) => isRed(card(s, id).suit) && keepScore(s, p, id) <= 55);
@@ -382,9 +388,31 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   return { kind: 'end-phase' };
 }
 
+// 主公无牌可出时,尝试发动护驾/激将让同势力角色代打
+function maybeHelp(
+  s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'respond-card' }>,
+): ResponseData | null {
+  if (p.role !== 'lord') return null;
+  if (req.reason.kind === 'hujia' || req.reason.kind === 'jijiang') return null;
+  if (s.helpSpentId === req.id) return null;
+  const skill = req.pattern === 'shan' ? 'hujia' : req.pattern === 'sha' ? 'jijiang' : null;
+  if (!skill || !hasGeneralSkill(p, skill)) return null;
+  const faction = skill === 'hujia' ? 'wei' : 'shu';
+  const exists = s.players.some(
+    (x) => x.alive && x.id !== p.id
+      && (x.faction ?? GENERALS[x.general].faction) === faction,
+  );
+  return exists ? { kind: 'help' } : null;
+}
+
 function decideRespondCard(
   s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'respond-card' }>,
 ): ResponseData {
+  // 被主公点到护驾/激将:只有非敌对才代打
+  if ((req.reason.kind === 'hujia' || req.reason.kind === 'jijiang') && req.reason.who) {
+    const lord = player(s, req.reason.who);
+    if (isEnemy(s, p.role, lord)) return { kind: 'decline' };
+  }
   switch (req.pattern) {
     case 'shan': {
       const shan = handOf(s, p, 'shan');
@@ -397,7 +425,7 @@ function decideRespondCard(
         const black = p.hand.find((id) => isBlack(card(s, id).suit));
         if (black !== undefined) return { kind: 'card', cardId: black, skill: 'qingguo' };
       }
-      return { kind: 'decline' };
+      return maybeHelp(s, p, req) ?? { kind: 'decline' };
     }
     case 'sha': {
       // 决斗中被迫出杀 / 青龙刀追杀
@@ -425,7 +453,7 @@ function decideRespondCard(
         const shan = handOf(s, p, 'shan');
         if (shan.length > 1) return { kind: 'card', cardId: shan[0], skill: 'longdan' };
       }
-      return { kind: 'decline' };
+      return maybeHelp(s, p, req) ?? { kind: 'decline' };
     }
     case 'tao': {
       const who = req.reason.who ? player(s, req.reason.who) : null;

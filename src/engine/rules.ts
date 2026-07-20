@@ -97,6 +97,9 @@ export function validateResponseCard(
   pattern: 'shan' | 'sha' | 'tao' | 'wuxie',
 ): number {
   const s = ctx.s;
+  // 护驾/激将交付中:实际出牌者是帮手,按帮手的手牌与技能校验
+  const hd = s.helpDelivery;
+  if (hd && pid === hd.lord) pid = hd.helper;
   const p = player(s, pid);
   // 武圣/急救/倾国可以用装备区的牌转化,其余必须是手牌
   const equipConvert = resp.skill === 'wusheng' || resp.skill === 'jwusheng'

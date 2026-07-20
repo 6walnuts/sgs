@@ -107,7 +107,9 @@ export type SkillName =
   | 'jfanjian' | 'jguose' | 'jlianying' | 'jxiaoji'
   | 'jqingnang' | 'liyu' | 'jbiyue'
   | 'shensu3' | 'jjushou' | 'jiewei' | 'jliegong' | 'jkuanggu' | 'qimou'
-  | 'jtianxiang' | 'fenji' | 'jleiji' | 'jguhuo' | 'chanyuan';
+  | 'jtianxiang' | 'fenji' | 'jleiji' | 'jguhuo' | 'chanyuan'
+  // 主公技:激将(刘备)/护驾(曹操)
+  | 'jijiang' | 'hujia';
 
 export interface PlayerState {
   id: PlayerId;
@@ -618,6 +620,16 @@ export interface QimouFrame {
   player: PlayerId;
 }
 
+// 激将(主动):主公出牌阶段视为使用杀,由蜀势力角色代为打出
+export interface JijiangFrame {
+  type: 'jijiang';
+  step: 'wait';
+  lord: PlayerId;
+  target: PlayerId;
+  queue: PlayerId[];
+  idx: number;
+}
+
 // 开局选将:主公先选,其余角色按座次依次选;全部选定后发起始手牌
 export interface ChooseGeneralsFrame {
   type: 'choose-generals';
@@ -651,7 +663,7 @@ export type EffectFrame =
   | TuntianFrame | QiaobianFrame | TiaoxinFrame | ZhijiFrame
   | FangquanFrame | GuzhengFrame | HuashenFrame
   | JrendeFrame | YijueFrame | JfanjianFrame | JlianyingFrame
-  | FenjiFrame | QimouFrame
+  | FenjiFrame | QimouFrame | JijiangFrame
   | ChooseGeneralsFrame;
 
 // ---------- 请求-响应 ----------
@@ -666,7 +678,8 @@ export interface RequestReason {
       | 'fangzhu' | 'haoshi' | 'luanwu' | 'yinghun'
       | 'enyuan' | 'xuanhuo' | 'xuanfeng' | 'gongxin'
       | 'qiaobian' | 'xiangle' | 'tiaoxin' | 'beige' | 'fangquan' | 'guzheng'
-      | 'yijue' | 'jtieji' | 'jjushou' | 'jlianying' | 'fenwei' | 'liyu';
+      | 'yijue' | 'jtieji' | 'jjushou' | 'jlianying' | 'fenwei' | 'liyu'
+      | 'jijiang' | 'hujia';
   source?: PlayerId;
   target?: PlayerId;
   who?: PlayerId;
@@ -726,6 +739,7 @@ export type ResponseData =
   | { kind: 'arrange'; top: CardId[]; bottom: CardId[] }          // 应答 arrange-cards
   | { kind: 'pick'; zone: 'hand' | 'equip' | 'judge'; cardId?: CardId }
   | { kind: 'general'; general: GeneralId }                       // 应答 choose-general
+  | { kind: 'help' }                                              // 主公发动护驾/激将代打
   | { kind: 'decline' };
 
 export interface Action {
@@ -772,6 +786,11 @@ export interface GameState {
   turn: { activePlayer: PlayerId; phase: Phase; turnNumber: number };
   stack: EffectFrame[];
   pendingRequest: PendingRequest | null;
+  // 护驾/激将代打:主公把"需要杀/闪"的响应转给同势力角色
+  help?: { original: PendingRequest; skill: 'hujia' | 'jijiang';
+    queue: PlayerId[]; idx: number };
+  helpDelivery?: { lord: PlayerId; helper: PlayerId }; // 交付中:校验用帮手的手牌
+  helpSpentId?: number; // 该请求已发动过代打,不能再次发动
   nextRequestId: number;
   winner: Role[] | null;
   eventLog: GameEvent[];

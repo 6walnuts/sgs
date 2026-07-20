@@ -14,6 +14,7 @@ import type {
   TuntianFrame, QiaobianFrame, TiaoxinFrame, ZhijiFrame,
   FangquanFrame, GuzhengFrame, HuashenFrame, SkillName,
   JrendeFrame, YijueFrame, JfanjianFrame, JlianyingFrame, FenjiFrame, QimouFrame,
+  JijiangFrame,
 } from './types';
 import {
   EngineError, alivePlayers, ask, card, drawCards, emit, equipCardIds, fail,
@@ -23,7 +24,7 @@ import {
 } from './kernel';
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed, shaElement } from './deck';
-import { armorName, attackRange, distance, effectiveSuit, kongchengProtected, validateResponseCard, weaponName } from './rules';
+import { armorName, attackRange, distance, effectiveSuit, kongchengProtected, shaUsed, validateResponseCard, weaponName } from './rules';
 import { GENERALS } from './generals';
 
 // 蛊惑结算需要按声明的牌名走出牌逻辑;由 flow.ts 在模块加载时注入,避免循环依赖
@@ -3461,7 +3462,7 @@ const guzheng: FrameHandler<GuzhengFrame> = {
 
 // 化身可声明的技能:化身牌上的普通技能(排除主公技/觉醒技/化身系)
 const HUASHEN_EXCLUDED: SkillName[] = [
-  'jiuyuan', 'xueyi', 'songwei', 'baonve',
+  'jiuyuan', 'xueyi', 'songwei', 'baonve', 'jijiang', 'hujia',
   'zaoxian', 'zhiji', 'hunzi', 'huashen', 'xinsheng', 'wuhun',
   'qinxue', 'chanyuan',
 ];
@@ -4153,6 +4154,41 @@ const qimou: FrameHandler<QimouFrame> = {
   },
 };
 
+// ---------- 激将(主动,刘备主公技):出牌阶段视为使用杀,由蜀势力角色代打 ----------
+
+const jijiang: FrameHandler<JijiangFrame> = {
+  run(ctx, f) {
+    const s = ctx.s;
+    while (f.idx < f.queue.length && !player(s, f.queue[f.idx]).alive) f.idx += 1;
+    if (f.idx >= f.queue.length || !player(s, f.target).alive) {
+      popFrame(ctx, f); // 无人代打:此杀未发出
+      return;
+    }
+    ask(ctx, {
+      player: f.queue[f.idx], type: 'respond-card', pattern: 'sha', canDecline: true,
+      reason: { kind: 'jijiang', who: f.lord, target: f.target },
+    });
+  },
+  onResponse(ctx, f, resp) {
+    const s = ctx.s;
+    const r = expectDeclineOr(resp, 'card');
+    if (!r) {
+      f.idx += 1;
+      return; // run 会继续问下一名
+    }
+    const helper = f.queue[f.idx];
+    const cid = validateResponseCard(ctx, helper, r, 'sha');
+    emit(ctx, { type: 'skillInvoked', player: helper, skill: 'jijiang' });
+    const lord = player(s, f.lord);
+    lord.flags.sha = shaUsed(lord) + 1; // 计入主公本回合的杀次数
+    markShaUsage(ctx, f.lord);
+    popFrame(ctx, f);
+    moveCard(ctx, cid, { zone: 'processing' }, 'play');
+    emit(ctx, { type: 'cardPlayed', player: f.lord, cardId: cid, targets: [f.target], as: 'sha' });
+    pushFrame(ctx, { type: 'slash', step: 'start', source: f.lord, target: f.target, cardId: cid });
+  },
+};
+
 // ---------- 开局选将 ----------
 
 const chooseGenerals: FrameHandler<ChooseGeneralsFrame> = {
@@ -4214,6 +4250,6 @@ export const frameHandlers: Record<EffectFrame['type'], FrameHandler<any>> = {
   xuanhuo, mingce, xuanfeng,
   wuhun, gongxin, 'god-faction': godFaction,
   tuntian, qiaobian, tiaoxin, zhiji, fangquan, guzheng, huashen,
-  jrende, yijue, jfanjian, jlianying, fenji, qimou,
+  jrende, yijue, jfanjian, jlianying, fenji, qimou, jijiang,
   'choose-generals': chooseGenerals,
 };

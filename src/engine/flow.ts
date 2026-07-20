@@ -7,7 +7,7 @@ import type {
 import {
   alivePlayers, ask, card, drawCards, emit, equipCardIds, fail, flipToProcessing,
   hasSkill, heal, loseHp, markShaUsage, moveCard, moveCards, orderFrom, player,
-  pushFrame,
+  pushFrame, factionOf,
 } from './kernel';
 import type { Ctx } from './kernel';
 import { equipSlotOf, isBlack, isRed, isShaCard, shaElement } from './deck';
@@ -1298,6 +1298,21 @@ function useSkill(
       if (!hasSkill(s, p, 'qimou')) fail('你没有奇谋技能');
       if ((p.usedLimit ?? []).includes('qimou')) fail('奇谋是限定技,已发动过');
       pushFrame(ctx, { type: 'qimou', step: 'wait', player: p.id });
+      return;
+    }
+    case 'jijiang': {
+      // 激将(主动):出牌阶段视为使用杀,由其他蜀势力角色代打
+      if (!hasSkill(s, p, 'jijiang')) fail('你没有激将技能');
+      if (shaUsed(p) >= shaLimit(s, p)) fail('本回合使用杀的次数已用完');
+      const t = requireTarget(ctx, p, targets);
+      if (distance(s, p.id, t.id) > attackRange(s, p)) fail('目标超出攻击范围');
+      if (kongchengProtected(s, t)) fail('空城:该角色不能成为杀的目标');
+      const queue = orderFrom(s, p.id)
+        .filter((pid) => pid !== p.id && factionOf(s, player(s, pid)) === 'shu');
+      if (queue.length === 0) fail('场上没有其他蜀势力角色');
+      emit(ctx, { type: 'skillInvoked', player: p.id, skill: 'jijiang' });
+      emit(ctx, { type: 'targeted', source: p.id, targets: [t.id] });
+      pushFrame(ctx, { type: 'jijiang', step: 'wait', lord: p.id, target: t.id, queue, idx: 0 });
       return;
     }
     case 'gongxin': {

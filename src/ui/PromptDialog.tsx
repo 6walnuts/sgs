@@ -116,7 +116,22 @@ export function PromptDialog({
 
   const body = (() => {
     switch (req.type) {
-      case 'respond-card':
+      case 'respond-card': {
+        // 护驾/激将:主公需要闪/杀时可转给同势力角色代打
+        const helpSkill = (() => {
+          if (req.pattern !== 'shan' && req.pattern !== 'sha') return null;
+          if (req.reason.kind === 'hujia' || req.reason.kind === 'jijiang') return null;
+          if (human.role !== 'lord') return null;
+          const skill = req.pattern === 'shan' ? 'hujia' : 'jijiang';
+          if (!GENERALS[human.general].skills.includes(skill)) return null;
+          if (state.helpSpentId === req.id) return null;
+          const faction = req.pattern === 'shan' ? 'wei' : 'shu';
+          const exists = state.players.some(
+            (x) => x.alive && x.id !== human.id
+              && (x.faction ?? GENERALS[x.general].faction) === faction,
+          );
+          return exists ? skill : null;
+        })();
         return (
           <>
             <div className="dialog-cards">
@@ -132,9 +147,15 @@ export function PromptDialog({
                 </div>
               ))}
             </div>
+            {helpSkill && (
+              <button className="btn btn-skill" onClick={() => onSubmit({ kind: 'help' })}>
+                发动{SKILL_NAMES[helpSkill]}
+              </button>
+            )}
             <button className="btn" onClick={() => onSubmit({ kind: 'decline' })}>不出</button>
           </>
         );
+      }
       case 'choose-option':
         return (
           <>

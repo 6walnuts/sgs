@@ -77,7 +77,7 @@ export function hasSkill(_s: GameState, p: PlayerState, skill: SkillName): boole
     else if (def.skills.includes('huashen') && p.huashenSkill === skill) owns = true;
   }
   if (!owns) return false;
-  const lordOnly: SkillName[] = ['jiuyuan', 'xueyi', 'songwei', 'baonve'];
+  const lordOnly: SkillName[] = ['jiuyuan', 'xueyi', 'songwei', 'baonve', 'jijiang', 'hujia'];
   if (lordOnly.includes(skill) && p.role !== 'lord') return false;
   return true;
 }
