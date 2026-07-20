@@ -12,7 +12,8 @@ import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
 import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent, playerLabel } from './text';
 import { isBgmOn, startBgm, stopBgm } from './bgm';
-import { saveSettings } from './settings';
+import { playCardVoice } from './voice';
+import { loadSettings, saveSettings } from './settings';
 import type { Role } from '../engine/types';
 
 // 局内音乐开关:同步写回设置,下次进对局沿用
@@ -330,6 +331,31 @@ export function GameBoard({
   useEffect(() => {
     resetSelection();
   }, [req?.id, resetSelection]);
+
+  // 卡牌语音:新出现的出牌/打出/转化事件报牌名(按使用者性别选音源)
+  const voicedRef = useRef(0);
+  useEffect(() => {
+    const from = voicedRef.current;
+    voicedRef.current = state.eventLog.length;
+    if (from === 0 || !loadSettings().cardVoice) return; // 初次挂载不补播历史
+    for (let i = state.eventLog.length - 1; i >= from; i--) {
+      const ev = state.eventLog[i];
+      let name: CardName | undefined;
+      let pid: PlayerId | undefined;
+      if (ev.type === 'cardPlayed' || ev.type === 'cardResponded') {
+        name = ev.as ?? state.cards[ev.cardId]?.name;
+        pid = ev.player;
+      } else if (ev.type === 'virtualCard') {
+        name = ev.as;
+        pid = ev.player;
+      }
+      if (name && pid) {
+        const who = state.players.find((x) => x.id === pid);
+        playCardVoice(name, CARD_NAMES[name] ?? name, who ? GENERALS[who.general].gender : 'm');
+        break; // 一批事件只播最新的一条
+      }
+    }
+  }, [state]);
 
   const human = state.players.find((p) => p.id === humanId)!;
   const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards, selDeclare);

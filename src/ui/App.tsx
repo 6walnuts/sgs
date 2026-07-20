@@ -147,6 +147,21 @@ function Menu({ onLocal, onOnline }: {
           </button>
         </div>
         <div className="menu-row">
+          <label>语音</label>
+          <button
+            className={settings.cardVoice ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ cardVoice: true })}
+          >
+            开
+          </button>
+          <button
+            className={!settings.cardVoice ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ cardVoice: false })}
+          >
+            关
+          </button>
+        </div>
+        <div className="menu-row">
           <label>头像</label>
           <button
             className={settings.portraitStyle === 'cartoon' ? 'btn btn-skill btn-skill-on' : 'btn'}
