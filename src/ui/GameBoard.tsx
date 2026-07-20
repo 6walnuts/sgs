@@ -4,11 +4,41 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CardName, GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
 import { GENERALS } from '../engine/generals';
+import { ROLE_SETS } from '../engine/setup';
 import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
 import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
+import type { Role } from '../engine/types';
+
+// 身份分布:本局身份构成一览,阵亡的身份置灰(身份分布由人数决定,是公开信息)
+function RoleDist({ state }: { state: GameState }) {
+  const dist = ROLE_SETS[state.players.length as 4 | 5 | 8];
+  if (!dist) return null;
+  const total: Record<Role, number> = { lord: 0, loyalist: 0, rebel: 0, spy: 0 };
+  for (const r of dist) total[r] += 1;
+  const dead: Record<Role, number> = { lord: 0, loyalist: 0, rebel: 0, spy: 0 };
+  for (const p of state.players) if (!p.alive) dead[p.role] += 1;
+  const order: Role[] = ['lord', 'loyalist', 'rebel', 'spy'];
+  const chips: ReactNode[] = [];
+  for (const r of order) {
+    const alive = total[r] - dead[r];
+    for (let i = 0; i < total[r]; i++) {
+      chips.push(
+        <span key={`${r}-${i}`} className={`role role-${r}${i >= alive ? ' role-out' : ''}`}>
+          {ROLE_NAMES[r]}
+        </span>,
+      );
+    }
+  }
+  return (
+    <div className="role-dist">
+      <span className="role-dist-label">身份</span>
+      {chips}
+    </div>
+  );
+}
 
 type ActiveSkill =
   | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
@@ -212,7 +242,7 @@ function useTargetArrows(state: GameState): {
 }
 
 export function GameBoard({
-  state, humanId, submit, submitDefault, toast, overContent,
+  state, humanId, submit, submitDefault, toast, overContent, onExit,
 }: {
   state: GameState;
   humanId: PlayerId;
@@ -220,6 +250,7 @@ export function GameBoard({
   submitDefault: () => void;
   toast: string | null;
   overContent: ReactNode;
+  onExit?: () => void;
 }) {
   const [selCards, setSelCards] = useState<number[]>([]);
   const [selSkill, setSelSkill] = useState<ActiveSkill | null>(null);
@@ -414,6 +445,16 @@ export function GameBoard({
                 {state.discardPile.slice(-3).map((id) => (
                   <CardChip key={id} state={state} cardId={id} small />
                 ))}
+                {onExit && (
+                  <button
+                    className="btn btn-mini"
+                    onClick={() => {
+                      if (window.confirm('确定退出当前对局吗?')) onExit();
+                    }}
+                  >
+                    退出
+                  </button>
+                )}
               </div>
               {billboard && (
                 <div className="billboard" key={billboard.key}>
@@ -528,7 +569,10 @@ export function GameBoard({
         </div>
       </div>
 
-      <Log state={state} humanId={humanId} />
+      <div className="side">
+        <RoleDist state={state} />
+        <Log state={state} humanId={humanId} />
+      </div>
 
       {needDialog && req && (
         <PromptDialog

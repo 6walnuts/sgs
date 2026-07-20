@@ -259,6 +259,7 @@ function LocalSession({ seed, playerCount, settings, onRestart, onExit }: {
       submit={submit}
       submitDefault={() => game.submitHumanDefault()}
       toast={toast}
+      onExit={onExit}
       overContent={(
         <>
           <button className="btn btn-primary" onClick={onRestart}>再来一局</button>
@@ -301,6 +302,7 @@ function OnlinePlay({ intent, onExit }: { intent: NetIntent; onExit: () => void 
       }}
       submitDefault={() => net.submitHumanDefault()}
       toast={toast}
+      onExit={onExit}
       overContent={(
         <>
           {net.isHost

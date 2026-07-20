@@ -20,8 +20,8 @@ export function candidateCount(playerCount: number, requested?: number): number 
   return Math.max(3, Math.min(requested ?? 3, 6, poolCap));
 }
 
-// 标准身份场配置
-const ROLE_SETS: Record<PlayerCount, Role[]> = {
+// 标准身份场配置(UI 的身份分布展示也用它)
+export const ROLE_SETS: Record<PlayerCount, Role[]> = {
   4: ['lord', 'loyalist', 'rebel', 'spy'],
   5: ['lord', 'loyalist', 'rebel', 'rebel', 'spy'],
   8: ['lord', 'loyalist', 'loyalist', 'rebel', 'rebel', 'rebel', 'rebel', 'spy'],
