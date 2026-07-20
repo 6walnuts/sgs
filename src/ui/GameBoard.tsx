@@ -346,6 +346,8 @@ export function GameBoard({
     }
   }
 
+  // 其他角色按座次(从下家开始)围桌摆放:右侧自下而上 → 顶部从右到左 →
+  // 左侧自上而下,上家落在你的左手边,左右相邻即座次相邻
   const otherSeats = state.players
     .filter((p) => p.id !== humanId)
     .sort((a, b) => {
@@ -354,6 +356,22 @@ export function GameBoard({
       return da - db;
     })
     .map((p) => p.id);
+  const sideCount = Math.floor(otherSeats.length / 3);
+  const rightSeats = otherSeats.slice(0, sideCount).reverse(); // DOM 自上而下,下家在最下
+  const topSeats = otherSeats.slice(sideCount, otherSeats.length - sideCount).reverse(); // 从右到左
+  const leftSeats = otherSeats.slice(otherSeats.length - sideCount); // 自上而下,上家在最下
+
+  const renderSeat = (pid: PlayerId) => (
+    <Seat
+      key={pid}
+      state={state}
+      pid={pid}
+      humanId={humanId}
+      targetable={isMyPlay && needMax > 0 && state.players.find((p) => p.id === pid)!.alive}
+      targeted={selTargets.includes(pid)}
+      onTarget={() => toggleTarget(pid)}
+    />
+  );
 
   return (
     <div className="app">
@@ -378,36 +396,38 @@ export function GameBoard({
             ))}
           </svg>
         )}
-        <div className="seats-top">
-          {otherSeats.map((pid) => (
-            <Seat
-              key={pid}
-              state={state}
-              pid={pid}
-              humanId={humanId}
-              targetable={isMyPlay && needMax > 0 && state.players.find((p) => p.id === pid)!.alive}
-              targeted={selTargets.includes(pid)}
-              onTarget={() => toggleTarget(pid)}
-            />
-          ))}
-        </div>
-
-        <div className="table-center">
-          <div className="table-stats">
-            <span>牌堆 {state.drawPile.length}</span>
-            <span>弃牌堆 {state.discardPile.length}</span>
-            {state.discardPile.slice(-3).map((id) => (
-              <CardChip key={id} state={state} cardId={id} small />
-            ))}
+        <div className="table-grid">
+          <div className="seats-side seats-left">
+            {leftSeats.map(renderSeat)}
           </div>
-          {billboard && (
-            <div className="billboard" key={billboard.key}>
-              {billboard.cardId !== undefined && billboard.cardId > 0 && (
-                <CardChip state={state} cardId={billboard.cardId} />
-              )}
-              <span className="billboard-text">{billboard.text}</span>
+          <div className="table-mid">
+            <div
+              className="seats-topline"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, topSeats.length)}, minmax(0, 1fr))` }}
+            >
+              {topSeats.map(renderSeat)}
             </div>
-          )}
+            <div className="table-center">
+              <div className="table-stats">
+                <span>牌堆 {state.drawPile.length}</span>
+                <span>弃牌堆 {state.discardPile.length}</span>
+                {state.discardPile.slice(-3).map((id) => (
+                  <CardChip key={id} state={state} cardId={id} small />
+                ))}
+              </div>
+              {billboard && (
+                <div className="billboard" key={billboard.key}>
+                  {billboard.cardId !== undefined && billboard.cardId > 0 && (
+                    <CardChip state={state} cardId={billboard.cardId} />
+                  )}
+                  <span className="billboard-text">{billboard.text}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="seats-side seats-right">
+            {rightSeats.map(renderSeat)}
+          </div>
         </div>
 
         <div className="human-area">

@@ -49,13 +49,39 @@ body {
   to { opacity: 0; }
 }
 
-/* ---------- 座位 ---------- */
+/* ---------- 座位(围桌环形:左右两列 + 顶部一排) ---------- */
 
-.seats-top {
+.table-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: minmax(200px, 250px) 1fr minmax(200px, 250px);
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.table-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.seats-topline {
+  display: grid;
+  /* 列数由 JSX 按顶排人数内联指定,列可压缩不换行 */
   gap: 12px;
 }
+.seats-topline .seat, .seats-side .seat { min-width: 0; }
+
+.seats-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* 右列贴底:下家紧挨你;左列贴底:上家紧挨你 */
+.seats-right { justify-content: flex-end; }
+.seats-left { justify-content: flex-end; }
 
 .seat {
   background: #24402f;
@@ -115,6 +141,7 @@ body {
   font-size: 13px;
   color: #b9c9be;
   min-height: 56px;
+  flex: 1; /* 撑满顶排与手牌区之间,让左右列自然贴在桌边 */
 }
 
 /* ---------- 手牌与操作 ---------- */
@@ -257,6 +284,9 @@ body {
   .app { grid-template-columns: 1fr; height: auto; }
   .log { max-height: 300px; }
   .human-area { grid-template-columns: 1fr; }
+  .table-grid { grid-template-columns: 1fr; }
+  .seats-side { flex-direction: row; flex-wrap: wrap; }
+  .seats-side .seat { flex: 1; min-width: 210px; }
 }
 
 /* ---------- 菜单与联机大厅 ---------- */
