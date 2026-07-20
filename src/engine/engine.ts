@@ -3,8 +3,9 @@
 // 非法 Action 返回 error 且 state 原样返回(pendingRequest 保持未决)。
 
 import type { Action, EngineResult, GameState, PendingRequest, ResponseData } from './types';
-import { EngineError, ask, emit, factionOf, fail, hasSkill, orderFrom, player } from './kernel';
+import { EngineError, ask, card, emit, factionOf, fail, hasSkill, loseHp, moveCard, orderFrom, player } from './kernel';
 import type { Ctx } from './kernel';
+import { isShaCard } from './deck';
 import { validateResponseCard } from './rules';
 import { frameHandlers } from './frames';
 import { flowOnResponse, flowRun } from './flow';
@@ -30,6 +31,7 @@ function handleHelp(ctx: Ctx, req: PendingRequest, resp: ResponseData): boolean 
     const st = s.help;
     const pattern = st.skill === 'hujia' ? 'shan' : 'sha';
     if (resp.kind === 'card') {
+      if (resp.skill === 'guhuo') fail('代打不能使用蛊惑');
       const helper = st.queue[st.idx];
       validateResponseCard(ctx, helper, resp, pattern);
       emit(ctx, { type: 'skillInvoked', player: helper, skill: st.skill });
@@ -82,6 +84,93 @@ function handleHelp(ctx: Ctx, req: PendingRequest, resp: ResponseData): boolean 
   return false;
 }
 
+// ---------- 蛊惑响应声明:于吉把任意手牌声明为需要的杀/闪/桃/无懈 ----------
+
+function askGuhuoChallenger(ctx: Ctx): void {
+  const st = ctx.s.guhuoRespond!;
+  ask(ctx, {
+    player: st.queue[st.idx], type: 'choose-option', options: ['guhuo-challenge'],
+    canDecline: true, reason: 'guhuo-challenge',
+  });
+}
+
+// 质疑流程结束:亮牌裁定,真则交付原结算,假则作废并恢复原请求
+function resolveGuhuoRespond(ctx: Ctx): void {
+  const s = ctx.s;
+  const st = s.guhuoRespond!;
+  delete s.guhuoRespond;
+  const yuji = st.original.player;
+  const real = st.pattern === 'sha'
+    ? isShaCard(card(s, st.cardId).name)
+    : card(s, st.cardId).name === st.pattern;
+  emit(ctx, { type: 'cardRevealed', player: yuji, cardId: st.cardId, reason: 'guhuo' });
+  if (st.challenger !== undefined && !real) {
+    // 假牌被质疑:弃置,声明作废,回到原请求(不能再次声明)
+    moveCard(ctx, st.cardId, { zone: 'discard' }, 'guhuo');
+    s.guhuoSpentId = st.original.id;
+    s.pendingRequest = st.original;
+    return;
+  }
+  // 为真或无人质疑:这张牌按声明交付原结算
+  const delivered: ResponseData = { kind: 'card', cardId: st.cardId, skill: 'guhuo' };
+  const top = s.stack[s.stack.length - 1];
+  if (top) frameHandlers[top.type].onResponse(ctx, top, delivered, st.original);
+  else flowOnResponse(ctx, st.original, delivered);
+  if (st.challenger !== undefined && real) {
+    // 真牌被质疑:质疑者付出代价(界蛊惑:获得缠怨)
+    if (hasSkill(s, player(s, yuji), 'jguhuo')) {
+      const ch = player(s, st.challenger);
+      if (!(ch.usedLimit ?? []).includes('chanyuan')) {
+        ch.usedLimit = [...(ch.usedLimit ?? []), 'chanyuan'];
+        emit(ctx, { type: 'skillInvoked', player: st.challenger, skill: 'chanyuan' });
+      }
+    } else {
+      loseHp(ctx, st.challenger, 1);
+    }
+  }
+}
+
+// 返回 true 表示该应答已被蛊惑声明机制消化
+function handleGuhuoRespond(ctx: Ctx, req: PendingRequest, resp: ResponseData): boolean {
+  const s = ctx.s;
+  // ① 正在询问质疑
+  if (s.guhuoRespond) {
+    const st = s.guhuoRespond;
+    if (resp.kind === 'option') {
+      st.challenger = st.queue[st.idx];
+      resolveGuhuoRespond(ctx);
+      return true;
+    }
+    if (resp.kind !== 'decline') fail('请选择是否质疑');
+    st.idx += 1;
+    while (st.idx < st.queue.length && !player(s, st.queue[st.idx]).alive) st.idx += 1;
+    if (st.idx < st.queue.length) askGuhuoChallenger(ctx);
+    else resolveGuhuoRespond(ctx);
+    return true;
+  }
+  // ② 于吉发起响应声明:respond-card 请求上打出任意手牌并标记 skill: 'guhuo'
+  if (req.type === 'respond-card' && resp.kind === 'card' && resp.skill === 'guhuo') {
+    const yuji = player(s, req.player);
+    if (!hasSkill(s, yuji, 'guhuo') && !hasSkill(s, yuji, 'jguhuo')) fail('你没有蛊惑技能');
+    if (!yuji.hand.includes(resp.cardId)) fail('这张牌不在你的手牌中');
+    if (s.guhuoSpentId === req.id) fail('本次响应的蛊惑已被识破');
+    if (req.reason.kind === 'hujia' || req.reason.kind === 'jijiang') fail('代打不能使用蛊惑');
+    emit(ctx, { type: 'skillInvoked', player: req.player, skill: hasSkill(s, yuji, 'jguhuo') ? 'jguhuo' : 'guhuo' });
+    emit(ctx, { type: 'virtualCard', player: req.player, as: req.pattern, targets: [] });
+    // 缠怨者不能质疑
+    const queue = orderFrom(s, req.player).filter(
+      (pid) => pid !== req.player && !(player(s, pid).usedLimit ?? []).includes('chanyuan'),
+    );
+    s.guhuoRespond = {
+      original: req, cardId: resp.cardId, pattern: req.pattern, queue, idx: 0,
+    };
+    if (queue.length === 0) resolveGuhuoRespond(ctx);
+    else askGuhuoChallenger(ctx);
+    return true;
+  }
+  return false;
+}
+
 export function createGame(config: GameConfig): EngineResult {
   const s = buildInitialState(config);
   const ctx: Ctx = { s, events: [] };
@@ -107,7 +196,8 @@ export function applyAction(prev: GameState, action: Action): EngineResult {
   const ctx: Ctx = { s, events: [] };
   s.pendingRequest = null;
   try {
-    if (!handleHelp(ctx, req, action.response)) {
+    if (!handleHelp(ctx, req, action.response)
+        && !handleGuhuoRespond(ctx, req, action.response)) {
       if (s.stack.length > 0) {
         const top = s.stack[s.stack.length - 1];
         frameHandlers[top.type].onResponse(ctx, top, action.response, req);

@@ -43,6 +43,10 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
   if (c.pendingRequest?.type === 'choose-general' && c.pendingRequest.player !== viewer) {
     c.pendingRequest = { ...c.pendingRequest, candidates: [] };
   }
+  // 蛊惑响应声明扣置的牌只有声明者可见
+  if (c.guhuoRespond && c.guhuoRespond.original.player !== viewer) {
+    c.guhuoRespond = { ...c.guhuoRespond, cardId: -1 };
+  }
   // 化身可选技能来自隐藏的化身牌,只有被询问者可见
   if (c.pendingRequest?.type === 'choose-option'
       && c.pendingRequest.reason === 'huashen'

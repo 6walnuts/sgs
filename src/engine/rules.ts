@@ -141,6 +141,10 @@ export function validateResponseCard(
       if (!hasSkill(s, p, 'kanpo')) fail('你没有看破技能');
       if (!isBlack(c.suit)) fail('看破需要黑色牌');
       return resp.cardId;
+    case 'guhuo':
+      // 蛊惑声明的响应牌:真伪已由质疑流程裁定,任何手牌均可
+      if (!hasSkill(s, p, 'guhuo') && !hasSkill(s, p, 'jguhuo')) fail('你没有蛊惑技能');
+      return resp.cardId;
   }
   if (pattern === 'sha') {
     // 禁酒:高顺的酒均视为杀;武神:神关羽的红桃手牌均视为杀

@@ -73,11 +73,12 @@ export function pushTrick(
   pushFrame(ctx, { type: 'trick', step: 'start', ...args });
 }
 
-// 能打出无懈可击(含看破:卧龙的黑色手牌)
+// 能打出无懈可击(含看破:卧龙的黑色手牌;蛊惑:任意手牌声明)
 function canWuxie(ctx: Ctx, p: import('./types').PlayerState): boolean {
   if (!p.alive) return false;
   if (p.hand.some((id) => card(ctx.s, id).name === 'wuxie')) return true;
-  return hasSkill(ctx.s, p, 'kanpo') && p.hand.some((id) => isBlack(card(ctx.s, id).suit));
+  if (hasSkill(ctx.s, p, 'kanpo') && p.hand.some((id) => isBlack(card(ctx.s, id).suit))) return true;
+  return (hasSkill(ctx.s, p, 'guhuo') || hasSkill(ctx.s, p, 'jguhuo')) && p.hand.length > 0;
 }
 
 function wuxieHolders(ctx: Ctx): PlayerId[] {
@@ -1431,7 +1432,9 @@ const dying: FrameHandler<DyingFrame> = {
       && (asker.hand.some((id) => card(s, id).name === 'jiu')
         || (hasSkill(s, asker, 'jiuchi')
           && asker.hand.some((id) => card(s, id).suit === 'spade')));
-    if (!asker.alive || (!hasTao && !canJijiu && !canJiu)) { f.idx++; return; }
+    const canGuhuoTao = (hasSkill(s, asker, 'guhuo') || hasSkill(s, asker, 'jguhuo'))
+      && asker.hand.length > 0;
+    if (!asker.alive || (!hasTao && !canJijiu && !canJiu && !canGuhuoTao)) { f.idx++; return; }
     ask(ctx, {
       player: askerId, type: 'respond-card', pattern: 'tao', canDecline: true,
       reason: { kind: 'dying', who: f.who },
@@ -2983,7 +2986,7 @@ const pindian: FrameHandler<PindianFrame> = {
     const cid = resp.cardIds[0];
     if (f.step === 'a-wait') {
       if (!player(s, f.a).hand.includes(cid)) fail('这张牌不在你的手牌中');
-      moveCard(ctx, cid, { zone: 'processing' }, 'pindian');
+      // 暗选:牌留在手中,只记录在帧里(帧不下发客户端),双方选定后同时亮出
       f.cardA = cid;
       askPindianCard(ctx, f.b, f.a);
       f.step = 'b-wait';
@@ -2991,6 +2994,7 @@ const pindian: FrameHandler<PindianFrame> = {
     }
     if (f.step !== 'b-wait') fail('pindian 帧当前不接受应答');
     if (!player(s, f.b).hand.includes(cid)) fail('这张牌不在你的手牌中');
+    moveCard(ctx, f.cardA!, { zone: 'processing' }, 'pindian');
     moveCard(ctx, cid, { zone: 'processing' }, 'pindian');
     const cardA = f.cardA!;
     emit(ctx, { type: 'cardRevealed', player: f.a, cardId: cardA, reason: 'pindian' });

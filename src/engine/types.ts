@@ -732,7 +732,7 @@ export type ResponseData =
   | { kind: 'use-skill'; skill: SkillName; cardIds?: CardId[]; targets?: PlayerId[];
       declare?: CardName } // 蛊惑声明的牌名
   | { kind: 'end-phase' }
-  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' | 'jiuchi' }
+  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' | 'jiuchi' | 'guhuo' }
   | { kind: 'cards'; cardIds: CardId[] }                          // 应答 choose-cards
   | { kind: 'option'; index: number }                             // 应答 choose-option
   | { kind: 'players'; players: PlayerId[] }                      // 应答 choose-player
@@ -791,6 +791,11 @@ export interface GameState {
     queue: PlayerId[]; idx: number };
   helpDelivery?: { lord: PlayerId; helper: PlayerId }; // 交付中:校验用帮手的手牌
   helpSpentId?: number; // 该请求已发动过代打,不能再次发动
+  // 蛊惑响应声明:于吉把任意手牌声明为需要的牌,质疑流程结束后交付原结算
+  guhuoRespond?: { original: PendingRequest; cardId: CardId;
+    pattern: 'shan' | 'sha' | 'tao' | 'wuxie'; queue: PlayerId[]; idx: number;
+    challenger?: PlayerId };
+  guhuoSpentId?: number; // 该请求已声明过蛊惑且被识破,不能再次声明
   nextRequestId: number;
   winner: Role[] | null;
   eventLog: GameEvent[];

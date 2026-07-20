@@ -15,7 +15,7 @@ const TIMEOUT_SECONDS = 20;
 
 interface CandidateCard {
   cardId: number;
-  skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'jiuchi';
+  skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'jiuchi' | 'guhuo';
 }
 
 function respondCandidates(
@@ -77,6 +77,15 @@ function respondCandidates(
   if (req.pattern === 'tao' && skills.includes('jijiu') && s.turn.activePlayer !== p.id) {
     for (const id of [...p.hand, ...equips]) {
       if (isRed(s.cards[id].suit) && s.cards[id].name !== 'tao') out.push({ cardId: id, skill: 'jijiu' });
+    }
+  }
+  // 蛊惑:任意手牌声明为需要的牌(将被质疑裁定)
+  if ((skills.includes('guhuo') || skills.includes('jguhuo'))
+      && req.reason.kind !== 'hujia' && req.reason.kind !== 'jijiang'
+      && s.guhuoSpentId !== req.id) {
+    const already = new Set(out.map((c) => c.cardId));
+    for (const id of p.hand) {
+      if (!already.has(id)) out.push({ cardId: id, skill: 'guhuo' });
     }
   }
   return out;
