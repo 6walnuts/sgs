@@ -5,6 +5,7 @@ import { NetGame, defaultWsUrl } from '../game/netGame';
 import type { NetIntent } from '../game/netGame';
 import { GameBoard } from './GameBoard';
 import { loadSettings, saveSettings } from './settings';
+import { startBgm, stopBgm } from './bgm';
 import type { GameSettings } from './settings';
 
 type PlayerCount = 4 | 5 | 8;
@@ -131,6 +132,21 @@ function Menu({ onLocal, onOnline }: {
           </button>
         </div>
         <div className="menu-row">
+          <label>音乐</label>
+          <button
+            className={settings.bgm ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ bgm: true })}
+          >
+            开
+          </button>
+          <button
+            className={!settings.bgm ? 'btn btn-skill btn-skill-on' : 'btn'}
+            onClick={() => update({ bgm: false })}
+          >
+            关
+          </button>
+        </div>
+        <div className="menu-row">
           <label>头像</label>
           <button
             className={settings.portraitStyle === 'cartoon' ? 'btn btn-skill btn-skill-on' : 'btn'}
@@ -241,9 +257,11 @@ function LocalSession({ seed, playerCount, settings, onRestart, onExit }: {
     const off = game.onChange(setState);
     setState(game.state);
     game.start();
+    if (loadSettings().bgm) startBgm();
     return () => {
       off();
       game.stop();
+      stopBgm();
     };
   }, [game]);
 
@@ -281,9 +299,11 @@ function OnlinePlay({ intent, onExit }: { intent: NetIntent; onExit: () => void 
     net.onUpdate = force;
     net.onError = setToast;
     net.start();
+    if (loadSettings().bgm) startBgm();
     return () => {
       net.onUpdate = null;
       net.stop();
+      stopBgm();
     };
   }, [net, setToast]);
 

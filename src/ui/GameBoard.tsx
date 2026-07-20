@@ -11,7 +11,37 @@ import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
 import { CARD_NAMES, ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
+import { isBgmOn, startBgm, stopBgm } from './bgm';
+import { saveSettings } from './settings';
 import type { Role } from '../engine/types';
+
+// 局内音乐开关:同步写回设置,下次进对局沿用
+function BgmToggle() {
+  const [on, setOn] = useState(isBgmOn());
+  // 会话的 startBgm 在父组件 effect 中晚于本组件挂载执行,轮询对齐真实播放状态
+  useEffect(() => {
+    const t = setInterval(() => setOn(isBgmOn()), 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <button
+      className="btn btn-mini"
+      title={on ? '关闭背景音乐' : '开启背景音乐'}
+      onClick={() => {
+        if (on) {
+          stopBgm();
+          saveSettings({ bgm: false });
+        } else {
+          saveSettings({ bgm: true });
+          startBgm();
+        }
+        setOn(!on);
+      }}
+    >
+      {on ? '🎵' : '🔇'}
+    </button>
+  );
+}
 
 // 身份分布:本局身份构成一览,阵亡的身份置灰(身份分布由人数决定,是公开信息)
 function RoleDist({ state }: { state: GameState }) {
@@ -602,6 +632,7 @@ export function GameBoard({
       <div className="side">
         <div className="side-top">
           <RoleDist state={state} />
+          <BgmToggle />
           {onExit && (
             <button
               className="btn btn-mini btn-exit"
