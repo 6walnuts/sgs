@@ -15,7 +15,7 @@ const TIMEOUT_SECONDS = 20;
 
 interface CandidateCard {
   cardId: number;
-  skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo';
+  skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'jiuchi';
 }
 
 function respondCandidates(
@@ -23,6 +23,7 @@ function respondCandidates(
 ): CandidateCard[] {
   const p = s.players.find((x) => x.id === req.player)!;
   const skills = GENERALS[p.general].skills;
+  const equips = Object.values(p.equips).filter((x): x is number => x !== undefined);
   const out: CandidateCard[] = [];
   for (const id of p.hand) {
     const name = s.cards[id].name;
@@ -31,20 +32,27 @@ function respondCandidates(
       : name === req.pattern;
     if (matches) out.push({ cardId: id });
   }
-  // 濒死自救可用酒
+  // 濒死自救可用酒;酒池可用黑桃当酒
   if (req.pattern === 'tao' && req.reason.kind === 'dying' && req.reason.who === p.id) {
     for (const id of p.hand) {
       if (s.cards[id].name === 'jiu') out.push({ cardId: id });
     }
+    if (skills.includes('jiuchi')) {
+      for (const id of p.hand) {
+        if (s.cards[id].suit === 'spade' && s.cards[id].name !== 'jiu') {
+          out.push({ cardId: id, skill: 'jiuchi' });
+        }
+      }
+    }
   }
   if (req.pattern === 'sha') {
     if (skills.includes('wusheng')) {
-      for (const id of p.hand) {
+      for (const id of [...p.hand, ...equips]) {
         if (isRed(s.cards[id].suit) && s.cards[id].name !== 'sha') out.push({ cardId: id, skill: 'wusheng' });
       }
     }
     if (skills.includes('jwusheng')) {
-      for (const id of p.hand) {
+      for (const id of [...p.hand, ...equips]) {
         if (isRed(s.cards[id].suit) && s.cards[id].name !== 'sha') out.push({ cardId: id, skill: 'jwusheng' });
       }
     }
@@ -61,13 +69,13 @@ function respondCandidates(
       }
     }
     if (skills.includes('qingguo')) {
-      for (const id of p.hand) {
+      for (const id of [...p.hand, ...equips]) {
         if (isBlack(s.cards[id].suit) && s.cards[id].name !== 'shan') out.push({ cardId: id, skill: 'qingguo' });
       }
     }
   }
   if (req.pattern === 'tao' && skills.includes('jijiu') && s.turn.activePlayer !== p.id) {
-    for (const id of p.hand) {
+    for (const id of [...p.hand, ...equips]) {
       if (isRed(s.cards[id].suit) && s.cards[id].name !== 'tao') out.push({ cardId: id, skill: 'jijiu' });
     }
   }

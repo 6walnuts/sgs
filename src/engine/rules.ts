@@ -1,6 +1,6 @@
 import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
 import { WEAPON_RANGE, isBlack, isRed, isShaCard } from './deck';
-import { alivePlayers, card, factionOf, fail, hasSkill, player } from './kernel';
+import { alivePlayers, card, factionOf, fail, hasSkill, player, equipCardIds } from './kernel';
 import type { Ctx } from './kernel';
 
 // 座次距离(仅计存活角色)+ 目标的 +1 马 - 自己的 -1 马 - 马术,最小为 1
@@ -98,7 +98,12 @@ export function validateResponseCard(
 ): number {
   const s = ctx.s;
   const p = player(s, pid);
-  assertInHand(s, p, resp.cardId);
+  // 武圣/急救/倾国可以用装备区的牌转化,其余必须是手牌
+  const equipConvert = resp.skill === 'wusheng' || resp.skill === 'jwusheng'
+    || resp.skill === 'jijiu' || resp.skill === 'qingguo';
+  if (!(equipConvert && equipCardIds(p).includes(resp.cardId))) {
+    assertInHand(s, p, resp.cardId);
+  }
   const c = card(s, resp.cardId);
   switch (resp.skill) {
     case 'wusheng':

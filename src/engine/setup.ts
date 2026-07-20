@@ -95,9 +95,19 @@ export function buildInitialState(config: GameConfig): GameState {
     ];
     const perPlayer = candidateCount(count, config.generalCandidates);
     const candidates: Record<PlayerId, GeneralId[]> = {};
-    // 主公候选不含神将:先从非神部分取主公的候选,再顺序分配其余
+    // 主公候选不含神将:先从非神部分取主公的候选,再顺序分配其余;
+    // 并保证候选中至少有一名经典主公将(曹/刘/孙,含界版)
+    const CLASSIC_LORDS: GeneralId[] = [
+      'caocao', 'liubei', 'sunquan', 'jiecaocao', 'jieliubei', 'jiesunquan',
+    ];
     const nonGod = pool.filter((g) => GENERALS[g].faction !== 'god');
-    const lordCands = nonGod.slice(0, perPlayer + 2);
+    let lordCands = nonGod.slice(0, perPlayer + 2);
+    if (!lordCands.some((g) => CLASSIC_LORDS.includes(g))) {
+      const swapIn = nonGod.find(
+        (g, i) => i >= perPlayer + 2 && CLASSIC_LORDS.includes(g),
+      );
+      if (swapIn) lordCands = [...lordCands.slice(0, -1), swapIn];
+    }
     const rest = pool.filter((g) => !lordCands.includes(g));
     let cursor = 0;
     for (const pid of queue) {

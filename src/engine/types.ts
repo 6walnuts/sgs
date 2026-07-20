@@ -333,17 +333,19 @@ export interface FanjianFrame {
 export interface AoeFrame {
   type: 'aoe';
   step: 'next' | 'after-wuxie' | 'card-wait' | 'pick-wait'
-      | 'fenwei-wait' | 'fenwei-players';
+      | 'fenwei-wait' | 'fenwei-players'
+      | 'bagua-wait' | 'bagua-judged';
   effName: 'nanman' | 'wanjian' | 'taoyuan' | 'wugu';
   fwAsked?: boolean;   // 奋威已询问
   fwWho?: PlayerId;    // 被询问奋威的甘宁
+  bgTarget?: PlayerId; // 本目标已询问过八卦
   cardId: CardId;
   source: PlayerId;
   queue: PlayerId[];
   idx: number;
   shownIds?: CardId[]; // 五谷丰登亮出的牌
   extraCardIds?: CardId[]; // 乱击:两张牌当万箭,结算后一并弃置
-  childResult?: { negated: boolean };
+  childResult?: { negated?: boolean; cardId?: CardId }; // 无懈结果 / 八卦判定牌
 }
 
 export interface JiedaoFrame {
@@ -717,7 +719,7 @@ export type ResponseData =
   | { kind: 'use-skill'; skill: SkillName; cardIds?: CardId[]; targets?: PlayerId[];
       declare?: CardName } // 蛊惑声明的牌名
   | { kind: 'end-phase' }
-  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' }
+  | { kind: 'card'; cardId: CardId; skill?: 'wusheng' | 'jwusheng' | 'jijiu' | 'longdan' | 'qingguo' | 'kanpo' | 'jiuchi' }
   | { kind: 'cards'; cardIds: CardId[] }                          // 应答 choose-cards
   | { kind: 'option'; index: number }                             // 应答 choose-option
   | { kind: 'players'; players: PlayerId[] }                      // 应答 choose-player

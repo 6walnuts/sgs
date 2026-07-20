@@ -1426,7 +1426,10 @@ const dying: FrameHandler<DyingFrame> = {
     const canJijiu = hasSkill(s, asker, 'jijiu') && s.turn.activePlayer !== askerId
       && asker.hand.some((id) => isRed(card(s, id).suit));
     const hasTao = asker.hand.some((id) => card(s, id).name === 'tao');
-    const canJiu = askerId === f.who && asker.hand.some((id) => card(s, id).name === 'jiu');
+    const canJiu = askerId === f.who
+      && (asker.hand.some((id) => card(s, id).name === 'jiu')
+        || (hasSkill(s, asker, 'jiuchi')
+          && asker.hand.some((id) => card(s, id).suit === 'spade')));
     if (!asker.alive || (!hasTao && !canJijiu && !canJiu)) { f.idx++; return; }
     ask(ctx, {
       player: askerId, type: 'respond-card', pattern: 'tao', canDecline: true,
@@ -1477,7 +1480,15 @@ const dying: FrameHandler<DyingFrame> = {
     if (!r) { f.idx++; return; }
     const askerId = f.queue[f.idx];
     let cid: CardId;
-    if (card(s, r.cardId)?.name === 'jiu') {
+    if (r.skill === 'jiuchi') {
+      // 酒池:黑桃手牌当酒,只能濒死者自己使用
+      if (askerId !== f.who) fail('酒只能由濒死者自己使用');
+      if (!hasSkill(s, player(s, askerId), 'jiuchi')) fail('你没有酒池技能');
+      if (!player(s, askerId).hand.includes(r.cardId)) fail('这张牌不在你的手牌中');
+      if (card(s, r.cardId).suit !== 'spade') fail('酒池需要黑桃手牌');
+      emit(ctx, { type: 'skillInvoked', player: askerId, skill: 'jiuchi' });
+      cid = r.cardId;
+    } else if (card(s, r.cardId)?.name === 'jiu') {
       // 酒:只能濒死者自己使用,回复 1 点
       if (askerId !== f.who) fail('酒只能由濒死者自己使用');
       if (!player(s, askerId).hand.includes(r.cardId)) fail('这张牌不在你的手牌中');
@@ -1486,7 +1497,10 @@ const dying: FrameHandler<DyingFrame> = {
       cid = validateResponseCard(ctx, askerId, r, 'tao');
     }
     moveCard(ctx, cid, { zone: 'discard' }, 'respond');
-    emit(ctx, { type: 'cardResponded', player: askerId, cardId: cid, as: r.skill === 'jijiu' ? 'tao' : undefined });
+    emit(ctx, {
+      type: 'cardResponded', player: askerId, cardId: cid,
+      as: r.skill === 'jijiu' ? 'tao' : r.skill === 'jiuchi' ? 'jiu' : undefined,
+    });
     if (r.skill === 'jijiu') emit(ctx, { type: 'skillInvoked', player: askerId, skill: 'jijiu' });
     // 救援:其他吴势力角色对濒死的主公孙权使用桃,回复 +1
     const who = player(s, f.who);
@@ -2323,6 +2337,25 @@ const aoe: FrameHandler<AoeFrame> = {
         f.step = 'after-wuxie';
         return;
       }
+      case 'bagua-judged': {
+        const res = f.childResult?.cardId;
+        f.childResult = undefined;
+        const tgtId2 = f.queue[f.idx];
+        if (res !== undefined
+            && ['heart', 'diamond'].includes(effectiveSuit(s, res, tgtId2))) {
+          // 判定为红:视为打出了闪
+          emit(ctx, { type: 'skillInvoked', player: tgtId2, skill: 'bagua' });
+          f.idx++;
+          f.step = 'next';
+          return;
+        }
+        ask(ctx, {
+          player: tgtId2, type: 'respond-card', pattern: 'shan', canDecline: true,
+          reason: { kind: 'aoe', source: f.source, cardName: 'wanjian' },
+        });
+        f.step = 'card-wait';
+        return;
+      }
       case 'after-wuxie': {
         const negated = f.childResult?.negated ?? false;
         f.childResult = undefined;
@@ -2349,6 +2382,12 @@ const aoe: FrameHandler<AoeFrame> = {
             f.step = 'card-wait';
             return;
           case 'wanjian':
+            if (hasBaguaEffect(s, player(s, tgtId)) && f.bgTarget !== tgtId) {
+              f.bgTarget = tgtId;
+              ask(ctx, { player: tgtId, type: 'choose-option', options: ['bagua'], canDecline: true, reason: 'bagua' });
+              f.step = 'bagua-wait';
+              return;
+            }
             ask(ctx, {
               player: tgtId, type: 'respond-card', pattern: 'shan', canDecline: true,
               reason: { kind: 'aoe', source: f.source, cardName: 'wanjian' },
@@ -2412,6 +2451,21 @@ const aoe: FrameHandler<AoeFrame> = {
         f.shownIds = f.shownIds!.filter((id) => id !== cid);
         f.idx++;
         f.step = 'next';
+        return;
+      }
+      case 'bagua-wait': {
+        const r = expectDeclineOr(resp, 'option');
+        if (!r) {
+          // 不发动八卦:照常要求打出闪
+          ask(ctx, {
+            player: tgtId, type: 'respond-card', pattern: 'shan', canDecline: true,
+            reason: { kind: 'aoe', source: f.source, cardName: 'wanjian' },
+          });
+          f.step = 'card-wait';
+          return;
+        }
+        pushFrame(ctx, { type: 'judge', step: 'flip', player: tgtId, reason: 'bagua' });
+        f.step = 'bagua-judged';
         return;
       }
       case 'fenwei-wait': {

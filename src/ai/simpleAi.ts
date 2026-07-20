@@ -597,12 +597,47 @@ function decideChooseCards(
   s: GameState, p: PlayerState, req: Extract<PendingRequest, { type: 'choose-cards' }>,
 ): ResponseData {
   switch (req.reason.kind) {
-    case 'guicai':
-      // v1 简化:鬼才不改判
+    case 'guicai': {
+      // 鬼才/鬼道:帮队友翻好判定,坑敌人的判定不管
+      const jf = [...s.stack].reverse().find((f) => f.type === 'judge');
+      if (!jf || jf.type !== 'judge' || jf.cardId === undefined) return { kind: 'decline' };
+      const target = player(s, jf.player);
+      const ally = target.id === p.id || !isEnemy(s, p.role, target);
+      const goodFor = (id: CardId): boolean | null => {
+        const c = card(s, id);
+        switch (jf.reason) {
+          case 'lebusishu': return c.suit === 'heart';
+          case 'bingliang': return c.suit === 'club';
+          case 'shandian': return !(c.suit === 'spade' && c.rank >= 2 && c.rank <= 9);
+          case 'leiji': return c.suit !== 'spade';
+          default: return null; // 其他判定不参与
+        }
+      };
+      const cur = goodFor(jf.cardId);
+      if (cur === null || cur === ally) return { kind: 'decline' };
+      // 需要翻转:找一张能翻转结果的低价值牌(鬼道只能用黑色牌)
+      const guidaoOnly = hasGeneralSkill(p, 'guidao') && !hasGeneralSkill(p, 'guicai');
+      const fix = sortByScoreAsc(s, p, p.hand).find(
+        (id) => goodFor(id) === ally
+          && (!guidaoOnly || isBlack(card(s, id).suit))
+          && keepScore(s, p, id) <= 45,
+      );
+      if (fix !== undefined) return { kind: 'cards', cardIds: [fix] };
       return { kind: 'decline' };
-    case 'yiji':
-      // v1 简化:遗计摸到的牌自己留着
+    }
+    case 'yiji': {
+      // 遗计:把摸到的废牌分给受伤的队友,好牌自己留
+      const df = s.stack.find(
+        (f) => f.type === 'damage' && Array.isArray(f.yijiDrawn) && f.yijiDrawn.length > 0,
+      );
+      const drawn = df && df.type === 'damage' ? df.yijiDrawn ?? [] : [];
+      const hurtAlly = alliesOf(s, p).some((x) => x.hp < x.maxHp);
+      const junk = drawn.filter((id) => p.hand.includes(id) && keepScore(s, p, id) <= 35);
+      if (hurtAlly && junk.length > 0) {
+        return { kind: 'cards', cardIds: [sortByScoreAsc(s, p, junk)[0]] };
+      }
       return { kind: 'decline' };
+    }
     case 'liuli': {
       const worst = sortByScoreAsc(s, p, p.hand)[0];
       if (worst !== undefined) return { kind: 'cards', cardIds: [worst] };
@@ -719,6 +754,14 @@ function decideChoosePlayer(
       const t = enemies[0] ?? cands[0];
       if (!t) return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
       return { kind: 'players', players: [t.id] };
+    }
+    case 'yiji': {
+      // 遗计分牌:给最残的队友
+      const ally = cands
+        .filter((x) => !isEnemy(s, p.role, x))
+        .sort((a, b) => a.hp - b.hp)[0];
+      if (ally) return { kind: 'players', players: [ally.id] };
+      return req.canDecline ? { kind: 'decline' } : { kind: 'players', players: [req.candidates[0]] };
     }
     case 'slash': {
       // 神速的杀:挑最残的敌人
