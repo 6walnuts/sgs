@@ -1,8 +1,8 @@
 import type { GameState, GeneralId, PlayerId, PlayerState, Role } from './types';
 import { buildDeck } from './deck';
 import { grantHuashen } from './kernel';
-import { ALL_GENERAL_IDS, GENERALS } from './generals';
-import { shuffled } from './rng';
+import { BASE_GENERAL_IDS, GENERALS, jieOf } from './generals';
+import { nextRand, shuffled } from './rng';
 
 export type PlayerCount = 4 | 5 | 8;
 
@@ -15,8 +15,9 @@ export interface GameConfig {
 }
 
 // 每人候选数:限制在 [3,6],且保证 count*n + 2(主公加成)不超过武将池
+// (界版与原版同名武将只占一个池位)
 export function candidateCount(playerCount: number, requested?: number): number {
-  const poolCap = Math.floor((ALL_GENERAL_IDS.length - 2) / playerCount);
+  const poolCap = Math.floor((BASE_GENERAL_IDS.length - 2) / playerCount);
   return Math.max(3, Math.min(requested ?? 3, 6, poolCap));
 }
 
@@ -46,9 +47,10 @@ export function buildInitialState(config: GameConfig): GameState {
 
   const count = config.playerCount ?? 4;
   const roles = shuffled<Role>(state, [...ROLE_SETS[count]]);
+  // 武将池只放原版:界限突破与原版是同一名武将,不会同场出现两个"关羽"
   const available = config.godGenerals
-    ? ALL_GENERAL_IDS
-    : ALL_GENERAL_IDS.filter((g) => GENERALS[g].faction !== 'god');
+    ? BASE_GENERAL_IDS
+    : BASE_GENERAL_IDS.filter((g) => GENERALS[g].faction !== 'god');
   let pool = shuffled(state, available);
   // 神将不能当主公:把主公将拿到的神将换到池子后段
   const lordSeat = roles.indexOf('lord');
@@ -96,10 +98,8 @@ export function buildInitialState(config: GameConfig): GameState {
     const perPlayer = candidateCount(count, config.generalCandidates);
     const candidates: Record<PlayerId, GeneralId[]> = {};
     // 主公候选不含神将:先从非神部分取主公的候选,再顺序分配其余;
-    // 并保证候选中至少有一名经典主公将(曹/刘/孙,含界版)
-    const CLASSIC_LORDS: GeneralId[] = [
-      'caocao', 'liubei', 'sunquan', 'jiecaocao', 'jieliubei', 'jiesunquan',
-    ];
+    // 并保证候选中至少有一名经典主公将(曹/刘/孙,选择时可切界版)
+    const CLASSIC_LORDS: GeneralId[] = ['caocao', 'liubei', 'sunquan'];
     const nonGod = pool.filter((g) => GENERALS[g].faction !== 'god');
     let lordCands = nonGod.slice(0, perPlayer + 2);
     if (!lordCands.some((g) => CLASSIC_LORDS.includes(g))) {
@@ -129,6 +129,13 @@ export function buildInitialState(config: GameConfig): GameState {
   }
 
   for (const p of players) {
+    // 随机分配模式:有界版的武将掷硬币决定用原版还是界限突破
+    const j = jieOf(p.general);
+    if (j && nextRand(state) < 0.5) {
+      p.general = j;
+      p.maxHp = GENERALS[j].hp + (p.role === 'lord' ? 1 : 0);
+      p.hp = p.maxHp;
+    }
     p.hand = state.drawPile.splice(0, 4);
     if (GENERALS[p.general].skills.includes('huashen')) grantHuashen(state, p.id, 2);
   }

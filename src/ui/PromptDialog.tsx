@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { GameState, PendingRequest, PlayerId, ResponseData } from '../engine/types';
 import { isBlack, isRed } from '../engine/deck';
-import { GENERALS } from '../engine/generals';
+import { GENERALS, jieOf } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { GeneralPortrait } from './portraits';
 import {
@@ -103,12 +103,14 @@ export function PromptDialog({
   const [picked, setPicked] = useState<number[]>([]);
   const [pickedPlayers, setPickedPlayers] = useState<PlayerId[]>([]);
   const [bottomIds, setBottomIds] = useState<number[]>([]);
+  const [jiePick, setJiePick] = useState<Record<string, boolean>>({}); // 选将:哪些候选切到界版
 
   useEffect(() => {
     setSecondsLeft(TIMEOUT_SECONDS);
     setPicked([]);
     setPickedPlayers([]);
     setBottomIds([]);
+    setJiePick({});
     const t = setInterval(() => setSecondsLeft((x) => x - 1), 1000);
     return () => clearInterval(t);
   }, [req.id]);
@@ -324,27 +326,39 @@ export function PromptDialog({
         return (
           <div className="dialog-cards general-picks">
             {req.candidates.map((g) => {
-              const def = GENERALS[g];
+              // 界限突破与原版是同一名武将:候选只列原版,点开关切换形态
+              const jieId = jieOf(g);
+              const shown = jieId && jiePick[g] ? jieId : g;
+              const def = GENERALS[shown];
               return (
-                <button
-                  key={g}
-                  className="general-pick"
-                  onClick={() => onSubmit({ kind: 'general', general: g })}
-                >
-                  <GeneralPortrait general={g} />
-                  <div className="general-pick-name">
-                    {GENERAL_NAMES[g]}
-                    <span className={`faction faction-${def.faction}`}>{FACTION_NAMES[def.faction]}</span>
-                  </div>
-                  <div className="general-pick-hp">{'❤'.repeat(def.hp)}</div>
-                  <div className="general-pick-skills">
-                    {def.skills.map((sk) => (
-                      <span key={sk} className="skill-tag" data-tip={SKILL_DESCS[sk]}>
-                        {SKILL_NAMES[sk]}
-                      </span>
-                    ))}
-                  </div>
-                </button>
+                <div key={g} className="general-pick-wrap">
+                  <button
+                    className="general-pick"
+                    onClick={() => onSubmit({ kind: 'general', general: shown })}
+                  >
+                    <GeneralPortrait general={shown} />
+                    <div className="general-pick-name">
+                      {GENERAL_NAMES[shown]}
+                      <span className={`faction faction-${def.faction}`}>{FACTION_NAMES[def.faction]}</span>
+                    </div>
+                    <div className="general-pick-hp">{'❤'.repeat(def.hp)}</div>
+                    <div className="general-pick-skills">
+                      {def.skills.map((sk) => (
+                        <span key={sk} className="skill-tag" data-tip={SKILL_DESCS[sk]}>
+                          {SKILL_NAMES[sk]}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                  {jieId && (
+                    <button
+                      className={`btn btn-mini jie-toggle${jiePick[g] ? ' jie-toggle-on' : ''}`}
+                      onClick={() => setJiePick((cur) => ({ ...cur, [g]: !cur[g] }))}
+                    >
+                      {jiePick[g] ? '✓ 界限突破' : '界限突破'}
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

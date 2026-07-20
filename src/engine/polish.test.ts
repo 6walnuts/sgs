@@ -93,7 +93,8 @@ describe('酒池濒死自救', () => {
 
 describe('选将主公候选保底', () => {
   it('主公候选必含经典主公将(曹/刘/孙,含界版)', () => {
-    const CLASSIC = ['caocao', 'liubei', 'sunquan', 'jiecaocao', 'jieliubei', 'jiesunquan'];
+    // 候选只列原版(界版与原版同一武将,选择时切换)
+    const CLASSIC = ['caocao', 'liubei', 'sunquan'];
     for (let seed = 1; seed <= 30; seed++) {
       const s = createGame({ seed, pickGenerals: true }).state;
       expect(s.pendingRequest).toMatchObject({ type: 'choose-general' });

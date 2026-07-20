@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createGame } from './engine';
-import { ALL_GENERAL_IDS, GENERALS } from './generals';
+import { ALL_GENERAL_IDS, BASE_GENERAL_IDS, GENERALS, jieOf } from './generals';
 import { redactStateFor } from './view';
 import { decide, defaultResponse } from '../ai/simpleAi';
 import { act, actErr } from './testUtils';
@@ -74,8 +74,8 @@ describe('选将模式', () => {
     for (const p of s.players) {
       if (p.id !== lord.id) expect(frame.candidates[p.id]).toHaveLength(5);
     }
-    // 8 人局请求 99:候选数被钳制到 min(6, 池子容量)
-    const cap = Math.floor((ALL_GENERAL_IDS.length - 2) / 8);
+    // 8 人局请求 99:候选数被钳制到 min(6, 池子容量);池子按原版武将数计
+    const cap = Math.floor((BASE_GENERAL_IDS.length - 2) / 8);
     const expected = Math.min(6, cap);
     const s8 = createGame({ seed: 3, playerCount: 8, pickGenerals: true, generalCandidates: 99 }).state;
     const f8 = s8.stack[0];
@@ -85,6 +85,30 @@ describe('选将模式', () => {
     for (const p of s8.players) {
       if (p.id !== lord8.id) expect(f8.candidates[p.id]).toHaveLength(expected);
     }
+  });
+
+  it('界限突破与原版同一武将:候选只列原版,可直接选其界版', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const s0 = createGame({ seed, pickGenerals: true }).state;
+      const req = s0.pendingRequest!;
+      if (req.type !== 'choose-general') throw new Error('unreachable');
+      // 候选里永远不会出现界版(不会同场两个"关羽")
+      expect(req.candidates.every((g) => !g.startsWith('jie'))).toBe(true);
+      const withJie = req.candidates.find((g) => jieOf(g));
+      if (!withJie) continue;
+      const jieId = jieOf(withJie)!;
+      const s1 = act(s0, { kind: 'general', general: jieId });
+      const p = s1.players.find((x) => x.id === req.player)!;
+      expect(p.general).toBe(jieId);
+      expect(p.maxHp).toBe(GENERALS[jieId].hp + (p.role === 'lord' ? 1 : 0));
+      // 候选之外的武将,其界版同样不能选
+      const outsideBase = BASE_GENERAL_IDS.find(
+        (g) => !req.candidates.includes(g) && jieOf(g) !== undefined,
+      )!;
+      expect(actErr(s0, { kind: 'general', general: jieOf(outsideBase)! })).toContain('候选');
+      return;
+    }
+    throw new Error('60 个 seed 里竟无一含界版候选');
   });
 
   it('选将模式下 AI 对战能正常终局', () => {

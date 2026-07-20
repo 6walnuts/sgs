@@ -473,6 +473,13 @@ body {
 /* ---------- 选将 ---------- */
 
 .general-picks { justify-content: center; }
+.general-pick-wrap { display: flex; flex-direction: column; gap: 4px; }
+.general-pick-wrap .general-pick { flex: 1; }
+.jie-toggle { border-style: dashed; }
+.jie-toggle-on {
+  border-color: #d8b84a; border-style: solid;
+  color: #d8b84a; background: #3a3420;
+}
 .general-pick {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 10px 12px; cursor: pointer;

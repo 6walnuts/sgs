@@ -130,3 +130,11 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
 };
 
 export const ALL_GENERAL_IDS = Object.keys(GENERALS) as GeneralId[];
+
+// 界限突破与原版视为同一名武将:武将池/候选只放原版,登场时可切换界版
+export const BASE_GENERAL_IDS = ALL_GENERAL_IDS.filter((g) => !g.startsWith('jie'));
+
+export function jieOf(g: GeneralId): GeneralId | undefined {
+  const j = `jie${g}` as GeneralId;
+  return GENERALS[j] ? j : undefined;
+}

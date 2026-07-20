@@ -4224,7 +4224,12 @@ const chooseGenerals: FrameHandler<ChooseGeneralsFrame> = {
       return;
     }
     if (resp.kind !== 'general') fail('请从候选中选择一名武将');
-    if (!f.candidates[pid].includes(resp.general)) fail('只能从你的候选武将中选择');
+    // 候选只列原版;界限突破视为同一武将的另一形态,可直接选界版
+    const chosenOk = f.candidates[pid].includes(resp.general)
+      || (resp.general.startsWith('jie')
+          && GENERALS[resp.general] !== undefined
+          && f.candidates[pid].includes(resp.general.slice(3) as typeof resp.general));
+    if (!chosenOk) fail('只能从你的候选武将中选择(可切换为其界限突破版)');
     const p = player(ctx.s, pid);
     p.general = resp.general;
     p.maxHp = GENERALS[resp.general].hp + (p.role === 'lord' ? 1 : 0);

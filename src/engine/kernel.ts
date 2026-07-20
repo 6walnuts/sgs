@@ -5,7 +5,7 @@ import type {
   Card, CardId, EffectFrame, GameEvent, GameState, PendingRequest, PlayerId,
   PlayerState, Role, SkillName, ZoneRef,
 } from './types';
-import { ALL_GENERAL_IDS, GENERALS } from './generals';
+import { BASE_GENERAL_IDS, GENERALS } from './generals';
 import type { GeneralId } from './types';
 import { equipSlotOf } from './deck';
 import { randInt, shuffled } from './rng';
@@ -352,11 +352,13 @@ export function pickRandomHand(ctx: Ctx, p: PlayerState): CardId {
 }
 
 // 化身牌:从未登场且未被化身占用的非神武将中随机发放
+// (界版与原版视为同一武将:按原版名去重,池中也只放原版)
 export function grantHuashen(s: GameState, pid: PlayerId, n: number): void {
   const p = player(s, pid);
-  const used = new Set<GeneralId>(s.players.map((x) => x.general));
-  for (const x of s.players) for (const g of x.huashen ?? []) used.add(g);
-  const pool = ALL_GENERAL_IDS.filter((g) => !used.has(g) && GENERALS[g].faction !== 'god');
+  const baseOf = (g: GeneralId) => (g.startsWith('jie') ? g.slice(3) as GeneralId : g);
+  const used = new Set<GeneralId>(s.players.map((x) => baseOf(x.general)));
+  for (const x of s.players) for (const g of x.huashen ?? []) used.add(baseOf(g));
+  const pool = BASE_GENERAL_IDS.filter((g) => !used.has(g) && GENERALS[g].faction !== 'god');
   p.huashen = p.huashen ?? [];
   for (let i = 0; i < n && pool.length > 0; i++) {
     const idx = randInt(s, pool.length);

@@ -6,7 +6,7 @@ import type {
   CardId, CardName, GameState, PendingRequest, PlayerId, PlayerState, ResponseData, Role,
 } from '../engine/types';
 import { isBlack, isRed, isShaCard } from '../engine/deck';
-import { GENERALS } from '../engine/generals';
+import { GENERALS, jieOf } from '../engine/generals';
 import { ROLE_SETS } from '../engine/setup';
 import {
   attackRange, distance, effectiveSuit, kongchengProtected, shaLimit, shaUsed,
@@ -233,9 +233,15 @@ export function decide(s: GameState, me: PlayerId, req: PendingRequest): Respons
     case 'arrange-cards': return { kind: 'arrange', top: [...req.cardIds], bottom: [] };
     case 'pick-card': return decidePick(s, req);
     case 'choose-general': {
-      // 简单启发:偏好体力高、有主动技能的武将
-      const best = req.candidates.slice().sort((a, b) => {
-        const score = (g: typeof a) => GENERALS[g].hp * 2 + GENERALS[g].activeSkills.length;
+      // 简单启发:偏好体力高、有主动技能的武将;有界版的两个形态都参与评分,
+      // 同分时偏好界限突破(整体强化)
+      const options = req.candidates.flatMap((g) => {
+        const j = jieOf(g);
+        return j ? [j, g] : [g];
+      });
+      const best = options.sort((a, b) => {
+        const score = (g: typeof a) => GENERALS[g].hp * 2 + GENERALS[g].activeSkills.length
+          + (g.startsWith('jie') ? 0.5 : 0);
         return score(b) - score(a);
       })[0];
       return { kind: 'general', general: best };
