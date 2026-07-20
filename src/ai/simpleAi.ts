@@ -48,6 +48,8 @@ interface CampAnalysis {
   score: Map<PlayerId, number>; // 含锚点:主公/亮忠 +100,亮反 -100
   rebelsLeft: number;           // 场上还剩几名反贼(身份分布 - 已阵亡反贼,公开可推)
   hiddenLoyal: number;          // 尚未亮出身份的忠臣数(排除法用)
+  lackShan: Set<PlayerId>;      // 记牌:面对杀没闪、且此后没再摸过牌的人
+  diff: number;                 // 局势天平:>0 主公方占优,<0 反贼占优(借鉴 QSGS gameProcess)
 }
 
 let campCache: CampAnalysis | null = null;
@@ -68,7 +70,19 @@ function analyzeCamps(s: GameState): CampAnalysis {
     if (!anchor.has(pid)) score.set(pid, (score.get(pid) ?? 0) + d);
   };
   const recent = s.eventLog.length > 800 ? s.eventLog.slice(-800) : s.eventLog;
+  // 缺闪记牌:某人被杀指定后,若既没响应闪又吃了这名来源的伤害,标记"缺闪";
+  // 之后一旦有牌进他手牌就清除标记
+  const lackShan = new Set<PlayerId>();
+  const pendingSha = new Map<PlayerId, PlayerId>(); // 目标 → 杀的来源
   for (const ev of recent) {
+    // --- 记牌部分 ---
+    if (ev.type === 'cardResponded') {
+      pendingSha.delete(ev.player);
+      if (ev.as === 'shan' || s.cards[ev.cardId]?.name === 'shan') lackShan.delete(ev.player);
+    } else if (ev.type === 'cardsMoved' && ev.to.zone === 'hand' && ev.to.player) {
+      lackShan.delete(ev.to.player);
+    }
+    // --- 身份计分部分 ---
     let src: PlayerId | null = null;
     let targets: PlayerId[] = [];
     let w = 0;
@@ -76,13 +90,20 @@ function analyzeCamps(s: GameState): CampAnalysis {
       src = ev.source;
       targets = [ev.target];
       w = 6 * ev.amount;
+      if (pendingSha.get(ev.target) === ev.source) {
+        lackShan.add(ev.target);
+        pendingSha.delete(ev.target);
+      }
     } else if (ev.type === 'cardPlayed') {
       const name = ev.as ?? s.cards[ev.cardId]?.name;
-      if (!name || !HARMFUL_CARDS.has(name)) continue;
+      if (!name) continue;
+      if (isShaCard(name)) for (const t of ev.targets) pendingSha.set(t, ev.player);
+      if (!HARMFUL_CARDS.has(name)) continue;
       src = ev.player;
       targets = ev.targets;
       w = 5;
     } else if (ev.type === 'virtualCard') {
+      if (isShaCard(ev.as)) for (const t of ev.targets) pendingSha.set(t, ev.player);
       if (!HARMFUL_CARDS.has(ev.as)) continue;
       src = ev.player;
       targets = ev.targets;
@@ -104,12 +125,54 @@ function analyzeCamps(s: GameState): CampAnalysis {
   const deadRebels = s.players.filter((p) => !p.alive && p.role === 'rebel').length;
   const totalLoyal = total.filter((r) => r === 'loyalist').length;
   const revealedLoyal = s.players.filter((p) => p.roleRevealed && p.role === 'loyalist').length;
+  const rebelsLeft = totalRebels - deadRebels;
+  // 局势天平(借鉴 QSGS gameProcess):两阵营已识别成员的防御值之差 + 存活人数差先验。
+  // 只统计"身份已亮出或行为已归队"的人,隐藏者只进人数先验,不偷看身份
+  let lordSide = 0;
+  let rebelSide = 0;
+  for (const p of s.players) {
+    if (!p.alive) continue;
+    const sc = merged.get(p.id)!;
+    const side = p.roleRevealed
+      ? (p.role === 'rebel' ? 'rebel' : p.role === 'spy' ? null : 'lord')
+      : sc >= CLASSIFY_AT ? 'lord' : sc <= -CLASSIFY_AT ? 'rebel' : null;
+    if (side === 'lord') lordSide += defenseOf(p);
+    else if (side === 'rebel') rebelSide += defenseOf(p);
+  }
+  const deadLoyal = s.players.filter((p) => !p.alive && p.role === 'loyalist').length;
+  const lordAlive = s.players.some((p) => p.alive && p.role === 'lord') ? 1 : 0;
+  const lordCount = lordAlive + (totalLoyal - deadLoyal);
+  const diff = lordSide - rebelSide + (lordCount - rebelsLeft) * 3;
   campCache = {
     s, evLen: s.eventLog.length, score: merged,
-    rebelsLeft: totalRebels - deadRebels,
+    rebelsLeft,
     hiddenLoyal: totalLoyal - revealedLoyal,
+    lackShan, diff,
   };
   return campCache;
+}
+
+// 防御值(借鉴 QSGS getDefense):体力权重最高,手牌与防御装备其次。
+// 选杀目标时挑防御最低的;局势天平也用它称量两边强弱
+function defenseOf(p: PlayerState): number {
+  let d = p.hp * 2 + p.hand.length;
+  if (p.equips.armor !== undefined) d += 2;
+  if (p.equips.horsePlus !== undefined) d += 1;
+  if (hasGeneralSkill(p, 'bagua') || hasGeneralSkill(p, 'bazhen')) d += 1;
+  if (hasGeneralSkill(p, 'yiji') || hasGeneralSkill(p, 'jyiji')) d += 2; // 卖血回报型不好啃
+  if (hasGeneralSkill(p, 'ganglie') || hasGeneralSkill(p, 'jganglie')) d += 1;
+  return d;
+}
+
+// 供决策使用的局势读数;>= SPY_PRESS_AT 视为主公方优势过大(内奸出手压制)
+const SPY_PRESS_AT = 6;
+
+export function gameDiff(s: GameState): number {
+  return analyzeCamps(s).diff;
+}
+
+export function lacksShan(s: GameState, pid: PlayerId): boolean {
+  return analyzeCamps(s).lackShan.has(pid);
 }
 
 // 敌我判断:AI 知道自己的身份(myRole),对他人只用公开信息与行为推理
@@ -133,10 +196,19 @@ function isEnemy(s: GameState, myRole: Role, other: PlayerState): boolean {
     case 'rebel':
       if (revealed) return revealed === 'lord' || revealed === 'loyalist';
       return v >= ENEMY_AT; // 帮主公方出过手的
-    case 'spy':
+    case 'spy': {
       if (rebelsLeft === 0) return revealed !== 'spy'; // 决战:清剩下的主公方
+      const { diff } = analyzeCamps(s);
+      if (diff >= SPY_PRESS_AT) {
+        // 主公方优势过大:转头压制主公方保持平衡(但绝不打主公——
+        // 主公死则反贼直接获胜,内奸出局)
+        if (revealed) return revealed === 'loyalist';
+        return v >= ENEMY_AT;
+      }
+      // 均势或反贼占优:协助清反贼
       if (revealed) return revealed === 'rebel';
-      return v <= -ENEMY_AT; // 先协助清反贼
+      return v <= -ENEMY_AT;
+    }
   }
 }
 
@@ -435,11 +507,13 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     if (t) return { kind: 'use-skill', skill: 'jixi', cardIds: [p.tian![0]], targets: [t.id] };
   }
 
-  // 15. 杀(含火杀/雷杀/武圣/龙胆)
+  // 15. 杀(含火杀/雷杀/武圣/龙胆):优先打记牌里缺闪的,其次防御最低的
   if (shaUsed(p) < shaLimit(s, p)) {
+    const { lackShan } = analyzeCamps(s);
+    const softness = (e: PlayerState) => (lackShan.has(e.id) ? -100 : 0) + defenseOf(e);
     const inRange = enemies
       .filter((e) => distance(s, p.id, e.id) <= attackRange(s, p) && !kongchengProtected(s, e))
-      .sort((a, b) => a.hp - b.hp);
+      .sort((a, b) => softness(a) - softness(b));
     if (inRange.length > 0) {
       const sha = shaCards(s, p);
       // 酒:攻击前先喝
@@ -586,14 +660,35 @@ function decideRespondCard(
     case 'tao': {
       const who = req.reason.who ? player(s, req.reason.who) : null;
       if (!who) return { kind: 'decline' };
-      const save = who.id === p.id || !isEnemy(s, p.role, who);
-      if (!save) return { kind: 'decline' };
       const taos = handOf(s, p, 'tao');
-      if (taos.length > 0) return { kind: 'card', cardId: taos[0] };
+      // 自救:先喝酒(酒只有濒死/强杀两个用途)再吃桃
       if (who.id === p.id) {
         const jiu = handOf(s, p, 'jiu');
         if (jiu.length > 0) return { kind: 'card', cardId: jiu[0] };
+        if (taos.length > 0) return { kind: 'card', cardId: taos[0] };
+        if (hasGeneralSkill(p, 'jijiu') && s.turn.activePlayer !== p.id) {
+          const red = p.hand.find((id) => isRed(card(s, id).suit));
+          if (red !== undefined) return { kind: 'card', cardId: red, skill: 'jijiu' };
+        }
+        return { kind: 'decline' };
       }
+      if (isEnemy(s, p.role, who)) return { kind: 'decline' };
+      const whoIsLord = who.role === 'lord'; // 主公身份公开
+      // 出桃收紧(借鉴 QSGS willUsePeachTo):
+      // 内奸只救主公——除非反贼已明显占优,才需要保住主公方的忠臣
+      if (p.role === 'spy' && !whoIsLord && analyzeCamps(s).diff > 0) {
+        return { kind: 'decline' };
+      }
+      // 救不活就不浪费:需要的桃数超过我能给的,且没有其他可能补桃的队友
+      const need = 1 - who.hp;
+      const helpers = alliesOf(s, p)
+        .filter((a) => a.id !== who.id && a.hand.length > 0).length;
+      if (!whoIsLord && need > taos.length && helpers === 0) return { kind: 'decline' };
+      // 自保:只剩一张桃且自己也很虚,非主公不给
+      if (!whoIsLord && taos.length <= 1 && p.hp <= 2 && p.role !== 'loyalist') {
+        return { kind: 'decline' };
+      }
+      if (taos.length > 0) return { kind: 'card', cardId: taos[0] };
       if (hasGeneralSkill(p, 'jijiu') && s.turn.activePlayer !== p.id) {
         const red = p.hand.find((id) => isRed(card(s, id).suit));
         if (red !== undefined) return { kind: 'card', cardId: red, skill: 'jijiu' };
