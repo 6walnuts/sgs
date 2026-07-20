@@ -1,12 +1,13 @@
 // 规则式 AI。只通过 ResponseData 应答引擎请求,绝不直接修改 GameState。
-// v1 简化:AI 直接读取完整 state 中的身份做敌我判断(不看他人手牌);
-// 后续可改为基于 viewFor 视角 + 身份推理。
+// 敌我判断基于身份推理:只使用公开信息(主公与阵亡者的身份、事件日志),
+// 不偷看未亮出的身份。
 
 import type {
-  CardId, GameState, PendingRequest, PlayerId, PlayerState, ResponseData, Role,
+  CardId, CardName, GameState, PendingRequest, PlayerId, PlayerState, ResponseData, Role,
 } from '../engine/types';
 import { isBlack, isRed, isShaCard } from '../engine/deck';
 import { GENERALS } from '../engine/generals';
+import { ROLE_SETS } from '../engine/setup';
 import {
   attackRange, distance, effectiveSuit, kongchengProtected, shaLimit, shaUsed,
 } from '../engine/rules';
@@ -30,17 +31,119 @@ function skillVariant(p: PlayerState, base: string): string | null {
   return null;
 }
 
+// ---------- 身份推理 ----------
+// 对每名角色估一个"亲主公分":攻击主公方 → 扣分(反贼倾向),
+// 攻击反贼方 → 加分(主公方倾向)。主公与阵亡亮出的身份是固定锚点。
+
+const HARMFUL_CARDS = new Set([
+  'sha', 'huosha', 'leisha', 'juedou', 'lebusishu', 'bingliang',
+  'shunshou', 'guohe', 'huogong',
+]);
+const CLASSIFY_AT = 10;  // 分数绝对值超过它,视为已归队(供后续证据传导)
+const ENEMY_AT = 10;     // 分数超过它,作为攻击目标判断
+
+interface CampAnalysis {
+  s: GameState;
+  evLen: number; // 事件数,防同一状态对象被原地追加事件后命中旧缓存
+  score: Map<PlayerId, number>; // 含锚点:主公/亮忠 +100,亮反 -100
+  rebelsLeft: number;           // 场上还剩几名反贼(身份分布 - 已阵亡反贼,公开可推)
+  hiddenLoyal: number;          // 尚未亮出身份的忠臣数(排除法用)
+}
+
+let campCache: CampAnalysis | null = null;
+
+function analyzeCamps(s: GameState): CampAnalysis {
+  if (campCache && campCache.s === s && campCache.evLen === s.eventLog.length) return campCache;
+  const anchor = new Map<PlayerId, number>();
+  const score = new Map<PlayerId, number>();
+  for (const p of s.players) {
+    score.set(p.id, 0);
+    if (!p.roleRevealed) continue;
+    if (p.role === 'lord' || p.role === 'loyalist') anchor.set(p.id, 100);
+    else if (p.role === 'rebel') anchor.set(p.id, -100);
+    // 亮出的内奸不作锚点(攻击内奸不说明立场)
+  }
+  const val = (pid: PlayerId) => anchor.get(pid) ?? score.get(pid) ?? 0;
+  const bump = (pid: PlayerId, d: number) => {
+    if (!anchor.has(pid)) score.set(pid, (score.get(pid) ?? 0) + d);
+  };
+  const recent = s.eventLog.length > 800 ? s.eventLog.slice(-800) : s.eventLog;
+  for (const ev of recent) {
+    let src: PlayerId | null = null;
+    let targets: PlayerId[] = [];
+    let w = 0;
+    if (ev.type === 'damage' && ev.source) {
+      src = ev.source;
+      targets = [ev.target];
+      w = 6 * ev.amount;
+    } else if (ev.type === 'cardPlayed') {
+      const name = ev.as ?? s.cards[ev.cardId]?.name;
+      if (!name || !HARMFUL_CARDS.has(name)) continue;
+      src = ev.player;
+      targets = ev.targets;
+      w = 5;
+    } else if (ev.type === 'virtualCard') {
+      if (!HARMFUL_CARDS.has(ev.as)) continue;
+      src = ev.player;
+      targets = ev.targets;
+      w = 5;
+    } else {
+      continue;
+    }
+    for (const t of targets) {
+      if (t === src) continue;
+      const tv = val(t);
+      if (tv > CLASSIFY_AT) bump(src, -w);      // 打主公方 → 反贼倾向
+      else if (tv < -CLASSIFY_AT) bump(src, w); // 打反贼方 → 主公方倾向
+    }
+  }
+  const merged = new Map<PlayerId, number>();
+  for (const p of s.players) merged.set(p.id, anchor.get(p.id) ?? score.get(p.id) ?? 0);
+  const total = ROLE_SETS[s.players.length as 4 | 5 | 8] ?? [];
+  const totalRebels = total.filter((r) => r === 'rebel').length;
+  const deadRebels = s.players.filter((p) => !p.alive && p.role === 'rebel').length;
+  const totalLoyal = total.filter((r) => r === 'loyalist').length;
+  const revealedLoyal = s.players.filter((p) => p.roleRevealed && p.role === 'loyalist').length;
+  campCache = {
+    s, evLen: s.eventLog.length, score: merged,
+    rebelsLeft: totalRebels - deadRebels,
+    hiddenLoyal: totalLoyal - revealedLoyal,
+  };
+  return campCache;
+}
+
+// 敌我判断:AI 知道自己的身份(myRole),对他人只用公开信息与行为推理
 function isEnemy(s: GameState, myRole: Role, other: PlayerState): boolean {
-  const rebelsAlive = s.players.some((p) => p.alive && p.role === 'rebel');
+  const { score, rebelsLeft } = analyzeCamps(s);
+  const revealed = other.roleRevealed ? other.role : null;
+  const v = score.get(other.id) ?? 0;
   switch (myRole) {
     case 'lord':
-    case 'loyalist':
-      return other.role === 'rebel' || (other.role === 'spy' && !rebelsAlive);
+    case 'loyalist': {
+      if (revealed) return revealed === 'rebel' || (revealed === 'spy' && rebelsLeft === 0);
+      if (rebelsLeft === 0) {
+        // 反贼全灭:排除法 —— 未亮出的忠臣都能对上号(忠臣视角要先排除自己),
+        // 剩下藏着的必是内奸;否则仍看行为证据
+        const { hiddenLoyal } = analyzeCamps(s);
+        if (hiddenLoyal - (myRole === 'loyalist' ? 1 : 0) <= 0) return true;
+        return v <= -ENEMY_AT;
+      }
+      return v <= -ENEMY_AT;
+    }
     case 'rebel':
-      return other.role === 'lord' || other.role === 'loyalist';
+      if (revealed) return revealed === 'lord' || revealed === 'loyalist';
+      return v >= ENEMY_AT; // 帮主公方出过手的
     case 'spy':
-      return rebelsAlive ? other.role === 'rebel' : other.role !== 'spy';
+      if (rebelsLeft === 0) return revealed !== 'spy'; // 决战:清剩下的主公方
+      if (revealed) return revealed === 'rebel';
+      return v <= -ENEMY_AT; // 先协助清反贼
   }
+}
+
+// 供测试:某玩家视角下的敌人列表
+export function enemyIdsFor(s: GameState, pid: PlayerId): PlayerId[] {
+  const me = player(s, pid);
+  return enemiesOf(s, me).map((p) => p.id);
 }
 
 function enemiesOf(s: GameState, me: PlayerState): PlayerState[] {
@@ -107,6 +210,18 @@ function stealableCount(p: PlayerState): number {
   return cardCount(p) + p.judgeZone.length;
 }
 
+// 锦囊能否指定该目标(无言/帷幕/智迟会让引擎拒绝,AI 提前过滤,
+// 否则非法出牌回退成结束出牌,可能造成三方僵局)
+function trickBlocked(
+  _s: GameState, me: PlayerState, t: PlayerState, name: CardName, black: boolean,
+): boolean {
+  const DELAYED = name === 'lebusishu' || name === 'bingliang' || name === 'shandian';
+  if (!DELAYED && (hasGeneralSkill(me, 'wuyan') || hasGeneralSkill(t, 'wuyan'))) return true;
+  if (black && hasGeneralSkill(t, 'weimu')) return true;
+  if (!DELAYED && t.flags.zhichi) return true;
+  return false;
+}
+
 export function decide(s: GameState, me: PlayerId, req: PendingRequest): ResponseData {
   const p = player(s, me);
   switch (req.type) {
@@ -147,9 +262,11 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
     }
   }
 
-  // 3. 无中生有
+  // 3. 无中生有(手牌囤积过多时停手:牌堆循环会把打出的无中生有摸回来,造成死循环)
   const wz = handOf(s, p, 'wuzhong');
-  if (wz.length > 0) return { kind: 'play-card', cardId: wz[0], targets: [] };
+  if (wz.length > 0 && p.hand.length < 40) {
+    return { kind: 'play-card', cardId: wz[0], targets: [] };
+  }
 
   // 4. 制衡废牌
   const zh = skillVariant(p, 'zhiheng');
@@ -170,7 +287,7 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   // 6. 乐不思蜀 / 国色
   const le = handOf(s, p, 'lebusishu');
   const leTarget = enemies.find(
-    (e) => !hasGeneralSkill(e, 'qianxun')
+    (e) => !hasGeneralSkill(e, 'qianxun') && !hasGeneralSkill(e, 'weimu')
       && !e.judgeZone.some((id) => card(s, id).name === 'lebusishu'),
   );
   if (le.length > 0 && leTarget) {
@@ -189,7 +306,8 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   if (ss.length > 0) {
     const canReach = (e: PlayerState) =>
       (hasGeneralSkill(p, 'qicai') || distance(s, p.id, e.id) <= 1)
-      && !hasGeneralSkill(e, 'qianxun') && stealableCount(e) > 0;
+      && !hasGeneralSkill(e, 'qianxun') && stealableCount(e) > 0
+      && !trickBlocked(s, p, e, 'shunshou', true);
     const t = enemies.find(canReach);
     if (t) return { kind: 'play-card', cardId: ss[0], targets: [t.id] };
   }
@@ -197,14 +315,15 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   // 8. 过河拆桥(优先拆有装备的敌人)
   const gh = handOf(s, p, 'guohe');
   if (gh.length > 0) {
-    const t = enemies.find((e) => equipCount(e) > 0) ?? enemies.find((e) => stealableCount(e) > 0);
+    const ok = enemies.filter((e) => !trickBlocked(s, p, e, 'guohe', true));
+    const t = ok.find((e) => equipCount(e) > 0) ?? ok.find((e) => stealableCount(e) > 0);
     if (t) return { kind: 'play-card', cardId: gh[0], targets: [t.id] };
   }
 
   // 9. 奇袭:黑牌当过拆
   if (hasGeneralSkill(p, 'qixi')) {
     const black = p.hand.find((id) => isBlack(card(s, id).suit) && keepScore(s, p, id) <= 35);
-    const t = enemies.find((e) => stealableCount(e) > 0);
+    const t = enemies.find((e) => stealableCount(e) > 0 && !trickBlocked(s, p, e, 'guohe', true));
     if (black !== undefined && t) {
       return { kind: 'use-skill', skill: 'qixi', cardIds: [black], targets: [t.id] };
     }
@@ -282,17 +401,18 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   if (bl.length > 0) {
     const t = enemies.find(
       (e) => distance(s, p.id, e.id) <= 1
+        && !hasGeneralSkill(e, 'weimu')
         && !e.judgeZone.some((id) => card(s, id).name === 'bingliang'),
     );
     if (t) return { kind: 'play-card', cardId: bl[0], targets: [t.id] };
   }
   const hg = handOf(s, p, 'huogong');
   if (hg.length > 0 && p.hand.length >= 3) {
-    const t = enemies.find((e) => e.hand.length > 0);
+    const t = enemies.find((e) => e.hand.length > 0 && !trickBlocked(s, p, e, 'huogong', false));
     if (t) return { kind: 'play-card', cardId: hg[0], targets: [t.id] };
   }
   const ts2 = handOf(s, p, 'tiesuo');
-  if (ts2.length > 0) {
+  if (ts2.length > 0 && p.hand.length < 40) {
     return { kind: 'play-card', cardId: ts2[0], targets: [] }; // 简化:重铸换牌
   }
 
@@ -378,7 +498,9 @@ function decidePlay(s: GameState, p: PlayerState): ResponseData {
   // 16. 决斗:手里杀多时找敌人单挑
   const jd = handOf(s, p, 'juedou');
   if (jd.length > 0 && shaCards(s, p).length >= 2 && enemies.length > 0) {
-    const cands = enemies.filter((e) => !kongchengProtected(s, e));
+    const cands = enemies.filter(
+      (e) => !kongchengProtected(s, e) && !trickBlocked(s, p, e, 'juedou', false),
+    );
     if (cands.length > 0) {
       const t = cands.sort((a, b) => a.hand.length - b.hand.length)[0];
       return { kind: 'play-card', cardId: jd[0], targets: [t.id] };
