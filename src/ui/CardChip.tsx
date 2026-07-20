@@ -3,13 +3,14 @@ import { isRed } from '../engine/deck';
 import { CARD_NAMES, SUIT_SYMBOLS, rankLabel } from './text';
 
 export function CardChip({
-  state, cardId, selected, onClick, disabled, small,
+  state, cardId, selected, onClick, disabled, dimmed, small,
 }: {
   state: GameState;
   cardId: number;
   selected?: boolean;
   onClick?: () => void;
   disabled?: boolean;
+  dimmed?: boolean; // 当前不可用(如杀次数已满):明显置灰
   small?: boolean;
 }) {
   const c = state.cards[cardId];
@@ -20,6 +21,7 @@ export function CardChip({
         'card-chip',
         small ? 'card-small' : '',
         selected ? 'card-selected' : '',
+        dimmed ? 'card-dimmed' : '',
         onClick && !disabled ? 'card-clickable' : '',
       ].join(' ')}
       onClick={onClick}

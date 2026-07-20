@@ -213,6 +213,7 @@ body {
 }
 
 .card-chip:disabled { cursor: default; opacity: 0.9; }
+.card-dimmed { opacity: 0.35; filter: grayscale(0.7); }
 .card-clickable { cursor: pointer; }
 .card-clickable:hover { border-color: #d8b84a; transform: translateY(-2px); }
 .card-selected { border-color: #e35b5b; transform: translateY(-4px); box-shadow: 0 3px 6px #0006; }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { CardName, GameState, PlayerId, ResponseData, SkillName } from '../engine/types';
+import type { CardName, GameState, PlayerId, PlayerState, ResponseData, SkillName } from '../engine/types';
 import { GENERALS } from '../engine/generals';
 import { ROLE_SETS } from '../engine/setup';
 import { shaLimit, shaUsed } from '../engine/rules';
@@ -51,6 +51,33 @@ type ActiveSkill =
   | 'tiaoxin' | 'jixi' | 'zhijian'
   | 'jrende' | 'jwusheng' | 'yijue' | 'jzhiheng' | 'jkurou' | 'jfanjian'
   | 'jguose' | 'jqingnang' | 'qimou' | 'jijiang';
+
+// 出牌阶段这张牌当前能否直接使用(不含选技能转化的情形):
+// 不可用的牌在手牌区置灰,而不是提交后才报错(杀次数已满、满血的桃等)
+function playableNow(state: GameState, p: PlayerState, id: number): boolean {
+  const c = state.cards[id];
+  const skills = GENERALS[p.general].skills as readonly string[];
+  let name: CardName = c.name;
+  // 武神:红桃手牌均视为杀;禁酒:酒均视为杀
+  if (c.suit === 'heart' && skills.includes('wushen')) name = 'sha';
+  if (name === 'jiu' && skills.includes('jinjiu')) name = 'sha';
+  switch (name) {
+    case 'shan':
+    case 'wuxie':
+      return false; // 只能在响应时打出
+    case 'sha':
+    case 'huosha':
+    case 'leisha':
+      if (p.flags.tianyiLose || p.flags.xianzhenLose) return false;
+      return shaUsed(p) < shaLimit(state, p);
+    case 'tao':
+      return p.hp < p.maxHp;
+    case 'jiu':
+      return !p.flags.jiuUsed;
+    default:
+      return true;
+  }
+}
 
 // 蛊惑可声明的牌名(基本牌 + 非延时锦囊)
 const GUHUO_NAMES: CardName[] = [
@@ -490,16 +517,21 @@ export function GameBoard({
           />
           <div className="human-main">
             <div className="hand">
-              {human.hand.map((id) => (
-                <CardChip
-                  key={id}
-                  state={state}
-                  cardId={id}
-                  selected={selCards.includes(id)}
-                  onClick={isMyPlay ? () => toggleCard(id) : undefined}
-                  disabled={!isMyPlay}
-                />
-              ))}
+              {human.hand.map((id) => {
+                // 选中技能时任何牌都可作为技能素材;否则按当前可用性置灰
+                const dead = isMyPlay && !selSkill && !playableNow(state, human, id);
+                return (
+                  <CardChip
+                    key={id}
+                    state={state}
+                    cardId={id}
+                    selected={selCards.includes(id)}
+                    onClick={isMyPlay && !dead ? () => toggleCard(id) : undefined}
+                    disabled={!isMyPlay || dead}
+                    dimmed={dead}
+                  />
+                );
+              })}
               {human.hand.length === 0 && <span className="dialog-hint">没有手牌</span>}
             </div>
             {selSkill === 'jixi' && (human.tian?.length ?? 0) > 0 && (
