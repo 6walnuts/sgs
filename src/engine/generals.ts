@@ -10,6 +10,7 @@ export interface GeneralDef {
 }
 
 export const GENERALS: Record<GeneralId, GeneralDef> = {
+  // 初始 8 将
   liubei:   { id: 'liubei',   faction: 'shu', hp: 4, gender: 'm', skills: ['rende'], activeSkills: ['rende'] },
   guanyu:   { id: 'guanyu',   faction: 'shu', hp: 4, gender: 'm', skills: ['wusheng'], activeSkills: ['wusheng'] },
   caocao:   { id: 'caocao',   faction: 'wei', hp: 4, gender: 'm', skills: ['jianxiong'], activeSkills: [] },
@@ -18,6 +19,27 @@ export const GENERALS: Record<GeneralId, GeneralDef> = {
   ganning:  { id: 'ganning',  faction: 'wu',  hp: 4, gender: 'm', skills: ['qixi'], activeSkills: ['qixi'] },
   diaochan: { id: 'diaochan', faction: 'qun', hp: 3, gender: 'f', skills: ['lijian', 'biyue'], activeSkills: ['lijian'] },
   huatuo:   { id: 'huatuo',   faction: 'qun', hp: 3, gender: 'm', skills: ['jijiu', 'qingnang'], activeSkills: ['qingnang'] },
+  // 标准包 · 魏
+  xiahoudun: { id: 'xiahoudun', faction: 'wei', hp: 4, gender: 'm', skills: ['ganglie'], activeSkills: [] },
+  zhangliao: { id: 'zhangliao', faction: 'wei', hp: 4, gender: 'm', skills: ['tuxi'], activeSkills: [] },
+  xuchu:     { id: 'xuchu',     faction: 'wei', hp: 4, gender: 'm', skills: ['luoyi'], activeSkills: [] },
+  guojia:    { id: 'guojia',    faction: 'wei', hp: 3, gender: 'm', skills: ['tiandu', 'yiji'], activeSkills: [] },
+  zhenji:    { id: 'zhenji',    faction: 'wei', hp: 3, gender: 'f', skills: ['luoshen', 'qingguo'], activeSkills: [] },
+  // 标准包 · 蜀
+  zhangfei:     { id: 'zhangfei',     faction: 'shu', hp: 4, gender: 'm', skills: ['paoxiao'], activeSkills: [] },
+  zhugeliang:   { id: 'zhugeliang',   faction: 'shu', hp: 3, gender: 'm', skills: ['guanxing', 'kongcheng'], activeSkills: [] },
+  zhaoyun:      { id: 'zhaoyun',      faction: 'shu', hp: 4, gender: 'm', skills: ['longdan'], activeSkills: ['longdan'] },
+  machao:       { id: 'machao',       faction: 'shu', hp: 4, gender: 'm', skills: ['mashu', 'tieji'], activeSkills: [] },
+  huangyueying: { id: 'huangyueying', faction: 'shu', hp: 3, gender: 'f', skills: ['jizhi', 'qicai'], activeSkills: [] },
+  // 标准包 · 吴
+  lvmeng:        { id: 'lvmeng',        faction: 'wu', hp: 4, gender: 'm', skills: ['keji'], activeSkills: [] },
+  huanggai:      { id: 'huanggai',      faction: 'wu', hp: 4, gender: 'm', skills: ['kurou'], activeSkills: ['kurou'] },
+  zhouyu:        { id: 'zhouyu',        faction: 'wu', hp: 3, gender: 'm', skills: ['yingzi', 'fanjian'], activeSkills: ['fanjian'] },
+  daqiao:        { id: 'daqiao',        faction: 'wu', hp: 3, gender: 'f', skills: ['guose', 'liuli'], activeSkills: ['guose'] },
+  luxun:         { id: 'luxun',         faction: 'wu', hp: 3, gender: 'm', skills: ['qianxun', 'lianying'], activeSkills: [] },
+  sunshangxiang: { id: 'sunshangxiang', faction: 'wu', hp: 3, gender: 'f', skills: ['jieyin', 'xiaoji'], activeSkills: ['jieyin'] },
+  // 标准包 · 群
+  lvbu: { id: 'lvbu', faction: 'qun', hp: 4, gender: 'm', skills: ['wushuang'], activeSkills: [] },
 };
 
 export const ALL_GENERAL_IDS = Object.keys(GENERALS) as GeneralId[];

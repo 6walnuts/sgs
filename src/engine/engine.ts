@@ -8,7 +8,7 @@ import type { Ctx } from './kernel';
 import { frameHandlers } from './frames';
 import { flowOnResponse, flowRun } from './flow';
 import { buildInitialState } from './setup';
-import type { GameConfig } from './setup';
+import type { GameConfig, PlayerCount } from './setup';
 
 export function createGame(config: GameConfig): EngineResult {
   const s = buildInitialState(config);
@@ -62,4 +62,4 @@ function advance(ctx: Ctx): void {
   }
 }
 
-export type { GameConfig };
+export type { GameConfig, PlayerCount };

@@ -72,9 +72,174 @@ function Mouth({ curve = 1.6, y = 50 }: { curve?: number; y?: number }) {
   return <path d={`M36.5 ${y} Q40 ${y + curve} 43.5 ${y}`} stroke="#8a4a3a" strokeWidth="1.6" fill="none" strokeLinecap="round" />;
 }
 
+// ---------- 参数化模板(标准包补充武将用) ----------
+
+interface PortraitCfg {
+  skin: string;
+  robe: string;
+  trim: string;
+  hat?: 'helmet' | 'scholar' | 'ribbon' | 'circlet' | 'scarf';
+  hatColor?: string;
+  beard?: 'none' | 'mustache' | 'goatee' | 'full' | 'stubble' | 'short';
+  beardColor?: string;
+  female?: boolean;
+  fierce?: boolean;
+  old?: boolean;
+  extra?: 'eyepatch' | 'feather' | 'fan' | 'scar' | 'plume';
+}
+
+function Generic(cfg: PortraitCfg): ReactNode {
+  const hairColor = cfg.old ? '#dcd8cc' : '#241a12';
+  const beardColor = cfg.beardColor ?? hairColor;
+  const hatColor = cfg.hatColor ?? '#2a3f5c';
+  return (
+    <>
+      <Face skin={cfg.skin} neck={shade(cfg.skin)} />
+      {/* 发/冠 */}
+      {cfg.female ? (
+        <>
+          <path d="M24 40 Q22 20 40 18 Q58 20 56 40 Q54 27 40 26 Q26 27 24 40 Z" fill={hairColor} />
+          <circle cx="28" cy="17" r="5.5" fill={hairColor} />
+          <circle cx="52" cy="17" r="5.5" fill={hairColor} />
+          <path d="M24 34 Q22 44 24 52 L27 40 Z" fill={hairColor} />
+          <path d="M56 34 Q58 44 56 52 L53 40 Z" fill={hairColor} />
+          <rect x="49" y="13.4" width="6" height="1.8" rx="0.9" fill="#d8b84a" transform="rotate(18 52 14)" />
+        </>
+      ) : (
+        <path d="M25 32 Q26 21 40 20 Q54 21 55 32 Q48 26 40 26 Q32 26 25 32 Z" fill={hairColor} />
+      )}
+      {cfg.hat === 'helmet' && (
+        <>
+          <path d="M23 32 Q24 15 40 14 Q56 15 57 32 Q49 23 40 23 Q31 23 23 32 Z" fill={hatColor} />
+          <rect x="24" y="28" width="32" height="4" rx="2" fill="#d8b84a" opacity="0.85" />
+          <rect x="38.4" y="7" width="3.2" height="8" rx="1.6" fill={hatColor} />
+        </>
+      )}
+      {cfg.hat === 'scholar' && (
+        <>
+          <path d="M32 22 L33 7 L47 7 L48 22 Z" fill={hatColor} />
+          <rect x="31" y="19" width="18" height="4" rx="2" fill="#241a12" />
+          <circle cx="40" cy="12" r="1.8" fill="#8fae8f" />
+        </>
+      )}
+      {cfg.hat === 'ribbon' && (
+        <rect x="26" y="26" width="28" height="4.5" rx="2.2" fill={hatColor} />
+      )}
+      {cfg.hat === 'circlet' && (
+        <>
+          <rect x="30" y="16" width="20" height="5" rx="2.5" fill="#d8b84a" />
+          <path d="M36 10 Q40 7.5 44 10 L43 16 L37 16 Z" fill="#d8b84a" />
+        </>
+      )}
+      {cfg.hat === 'scarf' && (
+        <>
+          <path d="M24 33 Q24 18 40 17 Q56 18 56 33 Q50 24 40 24 Q30 24 24 33 Z" fill={hatColor} />
+          <path d="M53 22 Q60 24 58 33 L54 28 Z" fill={hatColor} />
+        </>
+      )}
+      {/* 眉眼口鼻 */}
+      <Brows angle={cfg.fierce ? 3 : 1.5} color={cfg.old ? '#e8e4da' : '#241a12'} />
+      <Eyes lift={cfg.fierce ? 0.6 : 0} width={cfg.female ? 1.5 : 1.8} />
+      {cfg.old && (
+        <>
+          <path d="M30 42.5 Q32.5 44 35 44.3" stroke="#c9a377" strokeWidth="0.9" fill="none" />
+          <path d="M50 42.5 Q47.5 44 45 44.3" stroke="#c9a377" strokeWidth="0.9" fill="none" />
+        </>
+      )}
+      <Nose />
+      {cfg.female ? (
+        <>
+          <ellipse cx="30.5" cy="44" rx="2.8" ry="1.6" fill="#f0a8a0" opacity="0.6" />
+          <ellipse cx="49.5" cy="44" rx="2.8" ry="1.6" fill="#f0a8a0" opacity="0.6" />
+          <path d="M37.6 49.6 Q40 51.4 42.4 49.6 Q40 49 37.6 49.6 Z" fill="#c94f5f" />
+        </>
+      ) : (
+        <Mouth curve={cfg.fierce ? -0.6 : 1.4} />
+      )}
+      {/* 胡须 */}
+      {(cfg.beard === 'mustache' || cfg.beard === 'goatee') && (
+        <>
+          <path d="M35 47.5 Q32 49 30.5 52" stroke={beardColor} strokeWidth="1.5" fill="none" strokeLinecap="round" />
+          <path d="M45 47.5 Q48 49 49.5 52" stroke={beardColor} strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        </>
+      )}
+      {cfg.beard === 'goatee' && (
+        <path d="M38.4 53.5 Q40 60 41.6 53.5 Q40.8 55 39.2 55 Z" fill={beardColor} />
+      )}
+      {cfg.beard === 'short' && (
+        <path d="M29 43 Q30 52 36 54.5 Q38 55.5 40 55.5 Q42 55.5 44 54.5 Q50 52 51 43 Q48 50 43 51 Q41.5 50.2 40 50.2 Q38.5 50.2 37 51 Q32 50 29 43 Z" fill={beardColor} />
+      )}
+      {cfg.beard === 'stubble' && (
+        <path d="M28 44 Q30 51 36 53.5 Q38 54.5 40 54.5 Q42 54.5 44 53.5 Q50 51 52 44 Q49 49.5 43 50.5 Q41.5 50 40 50 Q38.5 50 37 50.5 Q31 49.5 28 44 Z" fill={beardColor} opacity="0.55" />
+      )}
+      {cfg.beard === 'full' && (
+        <path d="M27 42 Q28 55 34 60 Q37 68 40 70 Q43 68 46 60 Q52 55 53 42 Q50 50 44 51 Q42 49.5 40 49.5 Q38 49.5 36 51 Q30 50 27 42 Z" fill={beardColor} />
+      )}
+      {/* 袍服 */}
+      <Robe color={cfg.robe} trim={cfg.trim} />
+      {/* 特饰 */}
+      {cfg.extra === 'eyepatch' && (
+        <>
+          <path d="M25 31 L55 41" stroke="#241a12" strokeWidth="1.6" />
+          <ellipse cx="33" cy="37.5" rx="5" ry="4" fill="#241a12" />
+        </>
+      )}
+      {cfg.extra === 'feather' && (
+        <>
+          <path d="M52 21 Q58 15 62 16 Q59 20 57 25 Z" fill="#e0e6ea" />
+          <path d="M55 20 Q58 17 60.5 17.5" stroke="#9aa6ae" strokeWidth="0.8" fill="none" />
+        </>
+      )}
+      {cfg.extra === 'plume' && (
+        <>
+          <path d="M28 16 Q20 4 14 2 Q22 3 30 12 Z" fill="#a55b8c" />
+          <path d="M52 16 Q60 4 66 2 Q58 3 50 12 Z" fill="#a55b8c" />
+        </>
+      )}
+      {cfg.extra === 'scar' && (
+        <path d="M48 30 L52 44" stroke="#a3644a" strokeWidth="1.4" strokeLinecap="round" />
+      )}
+      {cfg.extra === 'fan' && (
+        <>
+          <path d="M58 70 Q70 58 72 46 Q76 62 64 76 Z" fill="#e8e4da" />
+          <path d="M60 72 L70 50" stroke="#c9c4b4" strokeWidth="1" />
+          <rect x="56" y="72" width="4" height="12" rx="2" fill="#a56a3a" transform="rotate(20 58 78)" />
+        </>
+      )}
+    </>
+  );
+}
+
+function shade(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (x: number) => Math.max(0, Math.round(x * 0.85));
+  const r = f((n >> 16) & 255);
+  const g = f((n >> 8) & 255);
+  const b = f(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 // ---------- 各武将 ----------
 
 const PORTRAITS: Record<GeneralId, () => ReactNode> = {
+  // 标准包补充(参数化模板)
+  xiahoudun: () => Generic({ skin: '#d9a877', robe: '#2f4a6b', trim: '#cfd8e3', hat: 'helmet', hatColor: '#2a3f5c', beard: 'short', fierce: true, extra: 'eyepatch' }),
+  zhangliao: () => Generic({ skin: '#e0b184', robe: '#2f4a6b', trim: '#cfd8e3', hat: 'helmet', hatColor: '#24344c', beard: 'goatee' }),
+  xuchu: () => Generic({ skin: '#cf9663', robe: '#6b5638', trim: '#8a6a45', hat: 'ribbon', hatColor: '#5a4632', beard: 'stubble', fierce: true }),
+  guojia: () => Generic({ skin: '#ecd6b0', robe: '#35507a', trim: '#cfd8e3', hat: 'scholar', hatColor: '#1e2a3f', beard: 'none' }),
+  zhenji: () => Generic({ skin: '#f6dfc6', robe: '#46608c', trim: '#dfe8f5', female: true }),
+  zhangfei: () => Generic({ skin: '#c98a55', robe: '#7a3a30', trim: '#d8b84a', hat: 'ribbon', hatColor: '#241a12', beard: 'full', fierce: true }),
+  zhugeliang: () => Generic({ skin: '#ecd6b0', robe: '#4a7a68', trim: '#e8e2d0', hat: 'scholar', hatColor: '#3f7a72', beard: 'goatee', extra: 'fan' }),
+  zhaoyun: () => Generic({ skin: '#e8c49a', robe: '#b8c2cc', trim: '#7a3a30', hat: 'helmet', hatColor: '#8a94a0', beard: 'none' }),
+  machao: () => Generic({ skin: '#e0b184', robe: '#a53a3a', trim: '#d8b84a', hat: 'helmet', hatColor: '#8a2f2f', beard: 'none', extra: 'feather' }),
+  huangyueying: () => Generic({ skin: '#f2d8ba', robe: '#b04a3a', trim: '#f0d8b0', female: true }),
+  lvmeng: () => Generic({ skin: '#dcae7e', robe: '#2f6b45', trim: '#d8b84a', hat: 'helmet', hatColor: '#26502f', beard: 'short' }),
+  huanggai: () => Generic({ skin: '#d9a877', robe: '#6b6a58', trim: '#d8b84a', hat: 'ribbon', hatColor: '#8a8878', beard: 'full', beardColor: '#cfcabb', old: true, fierce: true }),
+  zhouyu: () => Generic({ skin: '#eccfa4', robe: '#a53a3a', trim: '#d8b84a', hat: 'circlet', beard: 'mustache' }),
+  daqiao: () => Generic({ skin: '#f6dfc6', robe: '#d88a96', trim: '#f5e6d0', female: true }),
+  luxun: () => Generic({ skin: '#ecd6b0', robe: '#3f8a5a', trim: '#e8e2d0', hat: 'scholar', hatColor: '#1e3d26', beard: 'none' }),
+  sunshangxiang: () => Generic({ skin: '#f2d8ba', robe: '#c04a4a', trim: '#d8b84a', female: true, fierce: true }),
+  lvbu: () => Generic({ skin: '#d9a877', robe: '#4c4456', trim: '#d8b84a', hat: 'helmet', hatColor: '#3a3440', beard: 'short', fierce: true, extra: 'plume' }),
   liubei: () => (
     <>
       <Face skin="#eac49c" neck="#d8ab7f" />

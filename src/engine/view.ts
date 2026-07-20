@@ -31,5 +31,9 @@ export function redactStateFor(s: GameState, viewer: PlayerId): GameState {
     if (!p.roleRevealed && !c.winner) p.role = 'loyalist';
   }
   c.eventLog = c.eventLog.map((ev) => redactEvent(ev, viewer));
+  // 观星等展示牌堆内容的请求,内容只有被询问者可见
+  if (c.pendingRequest?.type === 'arrange-cards' && c.pendingRequest.player !== viewer) {
+    c.pendingRequest = { ...c.pendingRequest, cardIds: c.pendingRequest.cardIds.map(() => -1) };
+  }
   return c;
 }

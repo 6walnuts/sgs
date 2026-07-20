@@ -135,12 +135,59 @@ function insertTo(s: GameState, id: CardId, to: ZoneRef): void {
 
 export function moveCards(ctx: Ctx, ids: CardId[], to: ZoneRef, reason?: string): void {
   if (ids.length === 0) return;
-  const from = findZone(ctx.s, ids[0]);
+  const s = ctx.s;
+  const from = findZone(s, ids[0]);
+  // 记录移动前的手牌/装备归属,用于连营、枭姬触发
+  const handOwners = new Map<PlayerId, number>();
+  const equipLoss = new Map<PlayerId, number>();
+  const baiyinLosers: PlayerId[] = [];
   for (const id of ids) {
-    removeFrom(ctx.s, id, findZone(ctx.s, id));
+    const z = findZone(s, id);
+    if (z.zone === 'hand' && z.player) {
+      handOwners.set(z.player, player(s, z.player).hand.length);
+    }
+    if (z.zone === 'equip' && z.player && !(to.zone === 'equip' && to.player === z.player)) {
+      equipLoss.set(z.player, (equipLoss.get(z.player) ?? 0) + 1);
+      if (card(s, id).name === 'baiyin') baiyinLosers.push(z.player);
+    }
+    removeFrom(s, id, z);
   }
-  for (const id of ids) insertTo(ctx.s, id, to);
+  for (const id of ids) insertTo(s, id, to);
   emit(ctx, { type: 'cardsMoved', cardIds: ids, from, to, reason });
+  // 连营:失去最后的手牌后摸一张
+  for (const [pid] of handOwners) {
+    const p = player(s, pid);
+    if (p.hand.length === 0 && p.alive && hasSkill(s, p, 'lianying')
+        && !(to.zone === 'hand' && to.player === pid)) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'lianying' });
+      drawCards(ctx, pid, 1);
+    }
+  }
+  // 枭姬:每失去一张装备区的牌摸两张
+  for (const [pid, n] of equipLoss) {
+    const p = player(s, pid);
+    if (p.alive && hasSkill(s, p, 'xiaoji')) {
+      for (let i = 0; i < n; i++) {
+        emit(ctx, { type: 'skillInvoked', player: pid, skill: 'xiaoji' });
+        drawCards(ctx, pid, 2);
+      }
+    }
+  }
+  // 白银狮子:失去该装备时回复 1 点体力
+  for (const pid of baiyinLosers) {
+    const p = player(s, pid);
+    if (p.alive && p.hp < p.maxHp) {
+      emit(ctx, { type: 'skillInvoked', player: pid, skill: 'baiyin' });
+      heal(ctx, pid, 1);
+    }
+  }
+}
+
+// 铁索连环:切换横置状态
+export function toggleChain(ctx: Ctx, pid: PlayerId): void {
+  const p = player(ctx.s, pid);
+  p.chained = !p.chained;
+  emit(ctx, { type: 'chained', player: pid, chained: !!p.chained });
 }
 
 export function moveCard(ctx: Ctx, id: CardId, to: ZoneRef, reason?: string): void {
@@ -153,7 +200,7 @@ export function inProcessing(s: GameState, id: CardId | null): boolean {
 
 // ---------- 摸牌 ----------
 
-function refillDrawPile(ctx: Ctx): void {
+export function refillDrawPile(ctx: Ctx): void {
   if (ctx.s.drawPile.length > 0 || ctx.s.discardPile.length === 0) return;
   ctx.s.drawPile = shuffled(ctx.s, ctx.s.discardPile);
   ctx.s.discardPile = [];
@@ -201,6 +248,26 @@ export function heal(ctx: Ctx, pid: PlayerId, n: number): void {
   const delta = next - p.hp;
   p.hp = next;
   emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta });
+}
+
+// 失去体力(非伤害:不触发奸雄/反馈/刚烈/遗计,但会进入濒死)
+export function loseHp(ctx: Ctx, pid: PlayerId, n: number): void {
+  const p = player(ctx.s, pid);
+  p.hp -= n;
+  emit(ctx, { type: 'hpChanged', player: pid, hp: p.hp, delta: -n });
+  if (p.hp <= 0 && p.alive) {
+    pushFrame(ctx, {
+      type: 'dying', step: 'ask', who: pid, source: null,
+      queue: orderFrom(ctx.s), idx: 0,
+    });
+  }
+}
+
+// 克己计数:自己回合的出牌阶段使用或打出过杀
+export function markShaUsage(ctx: Ctx, pid: PlayerId): void {
+  if (ctx.s.turn.activePlayer === pid && ctx.s.turn.phase === 'play') {
+    player(ctx.s, pid).flags.anySha = true;
+  }
 }
 
 export function pushFrame(ctx: Ctx, f: EffectFrame): void {

@@ -22,6 +22,23 @@ const GENERALS = [
   { id: 'ganning', name: '甘宁', candidates: ['Gan Ning Qing illustration.jpg'], search: 'Gan Ning illustration Romance of the Three Kingdoms' },
   { id: 'diaochan', name: '貂蝉', candidates: ['Diaochan Qing dynasty illustration.jpg', 'Diau Charn.jpg'], search: 'Diaochan illustration Qing dynasty' },
   { id: 'huatuo', name: '华佗', candidates: ['Hua Tuo.jpg', 'Huatuo.jpg', 'Hua To.jpg'], search: 'Hua Tuo portrait Qing dynasty' },
+  { id: 'xiahoudun', name: '夏侯惇', candidates: ['Xiahou Dun Qing illustration.jpg'], search: 'Xiahou Dun illustration Romance of the Three Kingdoms' },
+  { id: 'zhangliao', name: '张辽', candidates: ['Zhang Liao Qing illustration.jpg'], search: 'Zhang Liao illustration Romance of the Three Kingdoms' },
+  { id: 'xuchu', name: '许褚', candidates: ['Xu Chu Qing illustration.jpg'], search: 'Xu Chu illustration Romance of the Three Kingdoms' },
+  { id: 'guojia', name: '郭嘉', candidates: ['Guo Jia Qing illustration.jpg'], search: 'Guo Jia illustration Romance of the Three Kingdoms' },
+  { id: 'zhenji', name: '甄姬', candidates: ['Empress Zhen.jpg'], search: 'Lady Zhen illustration Qing dynasty' },
+  { id: 'zhangfei', name: '张飞', candidates: ['Zhang Fei Qing illustration.jpg'], search: 'Zhang Fei illustration Romance of the Three Kingdoms' },
+  { id: 'zhugeliang', name: '诸葛亮', candidates: ['Zhuge Liang scth.jpg', 'Zhuge Liang Tang.jpg'], search: 'Zhuge Liang portrait Sancai Tuhui' },
+  { id: 'zhaoyun', name: '赵云', candidates: ['Zhao Yun Qing illustration.jpg'], search: 'Zhao Yun illustration Romance of the Three Kingdoms' },
+  { id: 'machao', name: '马超', candidates: ['Ma Chao Qing illustration.jpg'], search: 'Ma Chao illustration Romance of the Three Kingdoms' },
+  { id: 'huangyueying', name: '黄月英', candidates: [], search: 'Huang Yueying illustration Romance of the Three Kingdoms' },
+  { id: 'lvmeng', name: '吕蒙', candidates: ['Lu Meng Qing illustration.jpg'], search: 'Lu Meng illustration Romance of the Three Kingdoms' },
+  { id: 'huanggai', name: '黄盖', candidates: ['Huang Gai Qing illustration.jpg'], search: 'Huang Gai illustration Romance of the Three Kingdoms' },
+  { id: 'zhouyu', name: '周瑜', candidates: ['Zhou Yu portrait.jpg'], search: 'Zhou Yu illustration Romance of the Three Kingdoms' },
+  { id: 'daqiao', name: '大乔', candidates: [], search: 'Da Qiao illustration Qing dynasty' },
+  { id: 'luxun', name: '陆逊', candidates: ['Lu Xun Qing illustration.jpg'], search: 'Lu Xun Three Kingdoms illustration' },
+  { id: 'sunshangxiang', name: '孙尚香', candidates: ['Sun Shangxiang Qing illustration.jpg'], search: 'Sun Shangxiang illustration Romance of the Three Kingdoms' },
+  { id: 'lvbu', name: '吕布', candidates: ['Lu Bu Qing illustration.jpg'], search: 'Lu Bu illustration Romance of the Three Kingdoms' },
 ];
 
 const PD_PATTERN = /public\s*domain|^pd\b|pd-|cc0/i;

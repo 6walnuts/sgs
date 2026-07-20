@@ -1,9 +1,9 @@
 import type { GameState, PlayerId, PlayerState, ResponseData } from './types';
-import { isRed } from './deck';
+import { WEAPON_RANGE, isBlack, isRed, isShaCard } from './deck';
 import { alivePlayers, card, fail, hasSkill, player } from './kernel';
 import type { Ctx } from './kernel';
 
-// 座次距离(仅计存活角色)+ 目标的 +1 马 - 自己的 -1 马,最小为 1
+// 座次距离(仅计存活角色)+ 目标的 +1 马 - 自己的 -1 马 - 马术,最小为 1
 export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
   if (from === to) return 0;
   const alive = alivePlayers(s).sort((a, b) => a.seat - b.seat);
@@ -13,18 +13,31 @@ export function distance(s: GameState, from: PlayerId, to: PlayerId): number {
   const n = alive.length;
   const raw = Math.abs(ia - ib);
   let d = Math.min(raw, n - raw);
+  const src = player(s, from);
   if (player(s, to).equips.horsePlus !== undefined) d += 1;
-  if (player(s, from).equips.horseMinus !== undefined) d -= 1;
+  if (src.equips.horseMinus !== undefined) d -= 1;
+  if (hasSkill(s, src, 'mashu')) d -= 1;
   return Math.max(1, d);
 }
 
 export function attackRange(s: GameState, p: PlayerState): number {
   const w = p.equips.weapon;
-  if (w !== undefined && card(s, w).name === 'qinglongdao') return 3;
-  return 1;
+  if (w === undefined) return 1;
+  return WEAPON_RANGE[card(s, w).name] ?? 1;
+}
+
+export function weaponName(s: GameState, p: PlayerState): string | null {
+  const w = p.equips.weapon;
+  return w === undefined ? null : card(s, w).name;
+}
+
+export function armorName(s: GameState, p: PlayerState): string | null {
+  const a = p.equips.armor;
+  return a === undefined ? null : card(s, a).name;
 }
 
 export function shaLimit(s: GameState, p: PlayerState): number {
+  if (hasSkill(s, p, 'paoxiao')) return Infinity;
   const w = p.equips.weapon;
   if (w !== undefined && card(s, w).name === 'zhugeliannu') return Infinity;
   return 1;
@@ -38,7 +51,12 @@ export function assertInHand(_s: GameState, p: PlayerState, cardId: number): voi
   if (!p.hand.includes(cardId)) fail('这张牌不在你的手牌中');
 }
 
-// 校验 respond-card 的应答牌(含武圣/急救转化),返回卡牌 id。只校验,不移动。
+// 空城:没有手牌时不能成为杀或决斗的目标
+export function kongchengProtected(s: GameState, t: PlayerState): boolean {
+  return hasSkill(s, t, 'kongcheng') && t.hand.length === 0;
+}
+
+// 校验 respond-card 的应答牌(含武圣/急救/龙胆/倾国转化),返回卡牌 id。只校验,不移动。
 export function validateResponseCard(
   ctx: Ctx,
   pid: PlayerId,
@@ -49,17 +67,32 @@ export function validateResponseCard(
   const p = player(s, pid);
   assertInHand(s, p, resp.cardId);
   const c = card(s, resp.cardId);
-  if (resp.skill === 'wusheng') {
-    if (pattern !== 'sha') fail('武圣只能将红色牌当杀');
-    if (!hasSkill(s, p, 'wusheng')) fail('你没有武圣技能');
-    if (!isRed(c.suit)) fail('武圣需要红色牌');
-    return resp.cardId;
+  switch (resp.skill) {
+    case 'wusheng':
+      if (pattern !== 'sha') fail('武圣只能将红色牌当杀');
+      if (!hasSkill(s, p, 'wusheng')) fail('你没有武圣技能');
+      if (!isRed(c.suit)) fail('武圣需要红色牌');
+      return resp.cardId;
+    case 'jijiu':
+      if (pattern !== 'tao') fail('急救只能将红色牌当桃');
+      if (!hasSkill(s, p, 'jijiu')) fail('你没有急救技能');
+      if (s.turn.activePlayer === pid) fail('急救只能在回合外发动');
+      if (!isRed(c.suit)) fail('急救需要红色牌');
+      return resp.cardId;
+    case 'longdan':
+      if (!hasSkill(s, p, 'longdan')) fail('你没有龙胆技能');
+      if (pattern === 'sha' && c.name === 'shan') return resp.cardId;
+      if (pattern === 'shan' && c.name === 'sha') return resp.cardId;
+      fail('龙胆只能将杀当闪、闪当杀');
+      break;
+    case 'qingguo':
+      if (pattern !== 'shan') fail('倾国只能将黑色手牌当闪');
+      if (!hasSkill(s, p, 'qingguo')) fail('你没有倾国技能');
+      if (!isBlack(c.suit)) fail('倾国需要黑色牌');
+      return resp.cardId;
   }
-  if (resp.skill === 'jijiu') {
-    if (pattern !== 'tao') fail('急救只能将红色牌当桃');
-    if (!hasSkill(s, p, 'jijiu')) fail('你没有急救技能');
-    if (s.turn.activePlayer === pid) fail('急救只能在回合外发动');
-    if (!isRed(c.suit)) fail('急救需要红色牌');
+  if (pattern === 'sha') {
+    if (!isShaCard(c.name)) fail('打出的牌与要求不符');
     return resp.cardId;
   }
   if (c.name !== pattern) fail('打出的牌与要求不符');

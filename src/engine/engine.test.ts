@@ -1,118 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, createGame } from './engine';
-import type {
-  CardId, CardName, GameState, PlayerId, ResponseData, Role,
-} from './types';
-import { isRed } from './deck';
+import type { GameState, ResponseData } from './types';
 import { decide, defaultResponse } from '../ai/simpleAi';
-
-// ---------- 测试工具:直接摆牌构造局面 ----------
-
-function newGame(seed = 1): GameState {
-  return createGame({ seed }).state;
-}
-
-function removeEverywhere(s: GameState, id: CardId): void {
-  const pull = (arr: CardId[]) => {
-    const i = arr.indexOf(id);
-    if (i >= 0) arr.splice(i, 1);
-  };
-  pull(s.drawPile);
-  pull(s.discardPile);
-  pull(s.processingZone);
-  for (const p of s.players) {
-    pull(p.hand);
-    pull(p.judgeZone);
-    for (const k of Object.keys(p.equips) as Array<keyof typeof p.equips>) {
-      if (p.equips[k] === id) delete p.equips[k];
-    }
-  }
-}
-
-function clearHands(s: GameState): void {
-  for (const p of s.players) {
-    s.drawPile.push(...p.hand);
-    p.hand = [];
-  }
-}
-
-function inUse(s: GameState, id: CardId): boolean {
-  return s.players.some(
-    (p) => p.hand.includes(id)
-      || p.judgeZone.includes(id)
-      || Object.values(p.equips).includes(id),
-  ) || s.processingZone.includes(id);
-}
-
-function findCard(s: GameState, name: CardName, opts?: { red?: boolean }): CardId {
-  for (const c of Object.values(s.cards)) {
-    if (c.name !== name) continue;
-    if (opts?.red !== undefined && isRed(c.suit) !== opts.red) continue;
-    if (inUse(s, c.id)) continue;
-    return c.id;
-  }
-  throw new Error(`找不到卡牌 ${name}`);
-}
-
-function give(s: GameState, pid: PlayerId, name: CardName, opts?: { red?: boolean }): CardId {
-  const id = findCard(s, name, opts);
-  removeEverywhere(s, id);
-  s.players.find((p) => p.id === pid)!.hand.push(id);
-  return id;
-}
-
-function equip(s: GameState, pid: PlayerId, name: CardName): CardId {
-  const id = findCard(s, name);
-  removeEverywhere(s, id);
-  const p = s.players.find((x) => x.id === pid)!;
-  if (name === 'baguazhen') p.equips.armor = id;
-  else if (name === 'jiama') p.equips.horsePlus = id;
-  else if (name === 'jianma') p.equips.horseMinus = id;
-  else p.equips.weapon = id;
-  return id;
-}
-
-function setRoles(s: GameState, roles: Record<PlayerId, Role>): void {
-  for (const p of s.players) p.role = roles[p.id];
-}
-
-// 把牌堆顶设置为指定颜色的牌
-function rigDrawTop(s: GameState, opts: { red: boolean }): CardId {
-  const id = s.drawPile.find((cid) => isRed(s.cards[cid].suit) === opts.red);
-  if (id === undefined) throw new Error('牌堆里找不到指定颜色的牌');
-  removeEverywhere(s, id);
-  s.drawPile.unshift(id);
-  return id;
-}
-
-function rigPlay(s: GameState, pid: PlayerId): void {
-  s.stack = [];
-  s.processingZone = [];
-  const p = s.players.find((x) => x.id === pid)!;
-  p.flags = {};
-  s.turn = { activePlayer: pid, phase: 'play', turnNumber: s.turn.turnNumber };
-  s.pendingRequest = { id: s.nextRequestId++, player: pid, type: 'play' };
-}
-
-function act(s: GameState, response: ResponseData): GameState {
-  const req = s.pendingRequest;
-  if (!req) throw new Error('没有待应答请求');
-  const r = applyAction(s, { player: req.player, requestId: req.id, response });
-  if (r.error) throw new Error(`引擎拒绝:${r.error}`);
-  return r.state;
-}
-
-function actErr(s: GameState, response: ResponseData): string {
-  const req = s.pendingRequest!;
-  const r = applyAction(s, { player: req.player, requestId: req.id, response });
-  if (!r.error) throw new Error('预期引擎拒绝,但成功了');
-  expect(r.state).toBe(s);
-  return r.error;
-}
-
-function P(s: GameState, pid: PlayerId) {
-  return s.players.find((p) => p.id === pid)!;
-}
+import {
+  P, act, actErr, clearHands, equip, give, newGame, rigDrawTop, rigPlay, setRoles,
+} from './testUtils';
 
 // ---------- 用例 ----------
 
@@ -511,9 +403,9 @@ describe('序列化与对局完整性', () => {
     }
   });
 
-  it('AI 互相对战能正常终局(多个种子)', () => {
-    for (const seed of [1, 2, 3, 4, 5]) {
-      let s = newGame(seed);
+  it('AI 互相对战能正常终局(多个种子,25 将随机池)', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      let s = createGame({ seed }).state; // 不固定武将,覆盖全部技能组合
       let steps = 0;
       while (!s.winner && steps < 5000) {
         const req = s.pendingRequest!;

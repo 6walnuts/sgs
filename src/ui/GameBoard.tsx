@@ -8,25 +8,68 @@ import { CardChip } from './CardChip';
 import { Seat } from './Seat';
 import { PromptDialog } from './PromptDialog';
 import { Log } from './Log';
-import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES } from './text';
+import { ROLE_NAMES, SKILL_HINTS, SKILL_NAMES, describeEvent } from './text';
 
-type ActiveSkill = 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang';
+type ActiveSkill =
+  | 'rende' | 'wusheng' | 'zhiheng' | 'qixi' | 'lijian' | 'qingnang'
+  | 'longdan' | 'kurou' | 'jieyin' | 'fanjian' | 'guose' | 'zhangba';
 
-function targetsNeeded(state: GameState, skill: ActiveSkill | null, cardIds: number[]): number {
+// 目标数区间 [min, max]
+function targetsNeeded(
+  state: GameState, humanId: string, skill: ActiveSkill | null, cardIds: number[],
+): [number, number] {
   if (skill) {
     switch (skill) {
-      case 'lijian': return 2;
-      case 'zhiheng': return 0;
-      default: return 1;
+      case 'lijian': return [2, 2];
+      case 'zhiheng': return [0, 0];
+      case 'kurou': return [0, 0];
+      default: return [1, 1];
     }
   }
-  if (cardIds.length !== 1) return 0;
+  if (cardIds.length !== 1) return [0, 0];
+  const p = state.players.find((x) => x.id === humanId)!;
   const name = state.cards[cardIds[0]].name;
-  return ['sha', 'guohe', 'shunshou', 'juedou'].includes(name) ? 1 : 0;
+  if (name === 'sha') {
+    const w = p.equips.weapon;
+    const fangtian = w !== undefined && state.cards[w].name === 'fangtian';
+    const lastHand = p.hand.length === 1 && p.hand[0] === cardIds[0];
+    return fangtian && lastHand ? [1, 3] : [1, 1];
+  }
+  if (name === 'jiedao') return [2, 2];
+  if (name === 'tiesuo') return [0, 2]; // 0 = 重铸
+  if (['huosha', 'leisha'].includes(name)) return [1, 1];
+  return ['guohe', 'shunshou', 'juedou', 'lebusishu', 'huogong', 'bingliang'].includes(name)
+    ? [1, 1] : [0, 0];
+}
+
+// 技能需要选择的牌数:[最少, 最多]
+function cardsNeeded(skill: ActiveSkill): [number, number] {
+  switch (skill) {
+    case 'rende': return [1, 99];
+    case 'zhiheng': return [1, 99];
+    case 'jieyin': return [2, 2];
+    case 'zhangba': return [2, 2];
+    case 'kurou': return [0, 0];
+    case 'fanjian': return [0, 0];
+    default: return [1, 1];
+  }
+}
+
+// 确认按钮文案随所选动作变化(铁索无目标=重铸,技能显示技能名)
+function confirmLabel(
+  state: GameState, skill: ActiveSkill | null, cardIds: number[], targets: string[],
+): string {
+  if (skill) return `发动${SKILL_NAMES[skill]}`;
+  if (cardIds.length === 1) {
+    const name = state.cards[cardIds[0]].name;
+    if (name === 'tiesuo' && targets.length === 0) return '重铸';
+    if (name === 'jiu') return '使用酒';
+  }
+  return '出牌';
 }
 
 function multiSelect(skill: ActiveSkill | null): boolean {
-  return skill === 'rende' || skill === 'zhiheng';
+  return skill === 'rende' || skill === 'zhiheng' || skill === 'jieyin' || skill === 'zhangba';
 }
 
 export function GameBoard({
@@ -58,7 +101,7 @@ export function GameBoard({
   }, [req?.id, resetSelection]);
 
   const human = state.players.find((p) => p.id === humanId)!;
-  const needed = targetsNeeded(state, selSkill, selCards);
+  const [needMin, needMax] = targetsNeeded(state, humanId, selSkill, selCards);
 
   const toggleCard = (id: number) => {
     if (!isMyPlay) return;
@@ -70,10 +113,10 @@ export function GameBoard({
   };
 
   const toggleTarget = (pid: PlayerId) => {
-    if (!isMyPlay || needed === 0) return;
+    if (!isMyPlay || needMax === 0) return;
     setSelTargets((cur) => {
       if (cur.includes(pid)) return cur.filter((x) => x !== pid);
-      if (cur.length >= needed) return needed === 1 ? [pid] : cur;
+      if (cur.length >= needMax) return needMax === 1 ? [pid] : cur;
       return [...cur, pid];
     });
   };
@@ -87,18 +130,42 @@ export function GameBoard({
   };
 
   const canConfirm = isMyPlay
-    && (selSkill ? selCards.length > 0 : selCards.length === 1)
-    && selTargets.length === needed;
+    && (selSkill
+      ? selCards.length >= cardsNeeded(selSkill)[0] && selCards.length <= cardsNeeded(selSkill)[1]
+      : selCards.length === 1)
+    && selTargets.length >= needMin && selTargets.length <= needMax;
 
-  const activeSkills = (GENERALS[human.general].activeSkills as ActiveSkill[]);
+  const weaponId = human.equips.weapon;
+  const hasZhangba = weaponId !== undefined && state.cards[weaponId].name === 'zhangba';
+  const activeSkills: ActiveSkill[] = [
+    ...(GENERALS[human.general].activeSkills as ActiveSkill[]),
+    ...(hasZhangba ? (['zhangba'] as ActiveSkill[]) : []),
+  ];
   const skillDisabled = (sk: ActiveSkill): boolean => {
     switch (sk) {
       case 'zhiheng': return !!human.flags.zhiheng;
       case 'qingnang': return !!human.flags.qingnang;
       case 'lijian': return !!human.flags.lijian;
+      case 'jieyin': return !!human.flags.jieyin;
+      case 'fanjian': return !!human.flags.fanjian;
       default: return false;
     }
   };
+
+  // 出牌展示板:最近一条卡牌事件(带动画,方便看清场上局势)
+  let billboard: { key: number; text: string; cardId?: number } | null = null;
+  for (let i = state.eventLog.length - 1; i >= 0 && i >= state.eventLog.length - 12; i--) {
+    const ev = state.eventLog[i];
+    if (ev.type === 'cardPlayed' || ev.type === 'cardResponded'
+        || ev.type === 'judge' || ev.type === 'cardRevealed') {
+      billboard = { key: i, text: describeEvent(state, ev, humanId) ?? '', cardId: ev.cardId };
+      break;
+    }
+    if (ev.type === 'damage' || ev.type === 'nullified' || ev.type === 'phaseSkipped') {
+      billboard = { key: i, text: describeEvent(state, ev, humanId) ?? '' };
+      break;
+    }
+  }
 
   const otherSeats = state.players
     .filter((p) => p.id !== humanId)
@@ -119,7 +186,7 @@ export function GameBoard({
               state={state}
               pid={pid}
               humanId={humanId}
-              targetable={isMyPlay && needed > 0 && state.players.find((p) => p.id === pid)!.alive}
+              targetable={isMyPlay && needMax > 0 && state.players.find((p) => p.id === pid)!.alive}
               targeted={selTargets.includes(pid)}
               onTarget={() => toggleTarget(pid)}
             />
@@ -127,11 +194,21 @@ export function GameBoard({
         </div>
 
         <div className="table-center">
-          <span>牌堆 {state.drawPile.length}</span>
-          <span>弃牌堆 {state.discardPile.length}</span>
-          {state.discardPile.slice(-4).map((id) => (
-            <CardChip key={id} state={state} cardId={id} small />
-          ))}
+          <div className="table-stats">
+            <span>牌堆 {state.drawPile.length}</span>
+            <span>弃牌堆 {state.discardPile.length}</span>
+            {state.discardPile.slice(-3).map((id) => (
+              <CardChip key={id} state={state} cardId={id} small />
+            ))}
+          </div>
+          {billboard && (
+            <div className="billboard" key={billboard.key}>
+              {billboard.cardId !== undefined && billboard.cardId > 0 && (
+                <CardChip state={state} cardId={billboard.cardId} />
+              )}
+              <span className="billboard-text">{billboard.text}</span>
+            </div>
+          )}
         </div>
 
         <div className="human-area">
@@ -143,7 +220,7 @@ export function GameBoard({
             targeted={selTargets.includes(humanId)}
             selectedCards={selCards}
             onEquipClick={
-              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian')
+              isMyPlay && (selSkill === 'zhiheng' || selSkill === 'lijian' || selSkill === 'guose')
                 ? toggleCard
                 : undefined
             }
@@ -179,7 +256,7 @@ export function GameBoard({
                 </button>
               ))}
               <button className="btn btn-primary" disabled={!canConfirm} onClick={confirm}>
-                出牌
+                {confirmLabel(state, selSkill, selCards, selTargets)}
               </button>
               <button
                 className="btn"
@@ -189,8 +266,10 @@ export function GameBoard({
                 结束出牌
               </button>
             </div>
-            {isMyPlay && needed > selTargets.length && (
-              <div className="hint">请点击选择 {needed} 个目标</div>
+            {isMyPlay && needMin > selTargets.length && (
+              <div className="hint">
+                请点击选择 {needMin === needMax ? needMin : `${needMin}~${needMax}`} 个目标
+              </div>
             )}
           </div>
         </div>
