@@ -1,5 +1,11 @@
 # 卡牌语音音效来源
 
+> 同源素材还包括:`public/audio/skills/`(技能台词,文件名为本项目技能名,
+> 多台词加数字后缀)、`public/audio/deaths/`(阵亡语音,按武将 id)、
+> `public/audio/system/`(受伤/胜负音效)、`public/fx/`(战斗与武器防具
+> 特效帧序列,目录名为本项目牌名/特效名)。全部复刻自 QSanguosha-v2,
+> 版权归游卡桌游,仅个人使用,勿公开分发。
+
 本目录音效复刻自开源项目 QSanguosha-v2 的 `audio/` 素材
 (https://github.com/Mogara/QSanguosha-v2),原始音频版权归 **游卡桌游
 (YOKA Games)** 所有,仅供个人学习使用,请勿公开分发或用于商业用途。

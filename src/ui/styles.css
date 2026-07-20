@@ -90,7 +90,20 @@ body {
   padding: 10px;
   min-height: 120px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative; /* 特效层定位基准 */
 }
+
+/* 座位特效层:QSGS 复刻帧动画(受伤/闪/杀/武器防具特效等) */
+.seat-fx {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 6;
+}
+.fx-img { max-width: 85%; max-height: 95%; filter: drop-shadow(0 2px 6px #0008); }
 
 .seat-active { border-color: #d8b84a; box-shadow: 0 0 8px #d8b84a55; }
 .seat-dead { opacity: 0.45; filter: grayscale(0.8); }

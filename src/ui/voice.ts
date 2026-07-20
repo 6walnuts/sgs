@@ -5,6 +5,8 @@
 // 内置音效复刻自 QSanguosha-v2 项目的官方素材,版权归游卡桌游,仅个人使用,
 // 勿公开分发(见 public/audio/cards/SOURCES.md)。
 
+import { SKILL_VOICES } from './fxManifest';
+
 let zhVoice: SpeechSynthesisVoice | null = null;
 let voicesReady = false;
 
@@ -65,4 +67,42 @@ export function playCardVoice(cardName: string, label: string, gender: 'm' | 'f'
     [`/audio/cards/${g}/${cardName}.ogg`, `/audio/cards/${cardName}.ogg`],
     () => speak(label),
   );
+}
+
+// 技能语音:多台词随机挑一条;没有音源的技能念名字兜底
+export function playSkillVoice(skill: string, label: string): void {
+  const n = SKILL_VOICES[skill];
+  if (!n) {
+    speak(label);
+    return;
+  }
+  const pick = n > 1 ? String(1 + Math.floor(Math.random() * n)) : '';
+  tryUrls([`/audio/skills/${skill}${pick}.ogg`], () => speak(label));
+}
+
+// 阵亡语音:独立通道,不被后续出牌语音顶掉;界版沿用原版台词
+let deathCh: HTMLAudioElement | null = null;
+
+export function playDeathVoice(general: string): void {
+  const base = general.startsWith('jie') ? general.slice(3) : general;
+  const url = `/audio/deaths/${base}.ogg`;
+  if (fileKnown.get(url) === false) return;
+  const el = new Audio(url);
+  el.volume = 0.9;
+  el.addEventListener('error', () => fileKnown.set(url, false));
+  el.play().then(() => {
+    fileKnown.set(url, true);
+    deathCh?.pause();
+    deathCh = el;
+  }).catch(() => fileKnown.set(url, false));
+}
+
+// 短音效(受伤/胜负):即发即忘,可与人声叠放
+export function playSystemSound(name: string, volume = 0.55): void {
+  const url = `/audio/system/${name}.ogg`;
+  if (fileKnown.get(url) === false) return;
+  const el = new Audio(url);
+  el.volume = volume;
+  el.addEventListener('error', () => fileKnown.set(url, false));
+  el.play().then(() => fileKnown.set(url, true)).catch(() => fileKnown.set(url, false));
 }

@@ -1,11 +1,29 @@
+import { useEffect, useState } from 'react';
 import type { GameState, PlayerId } from '../engine/types';
 import { GENERAL_NAMES, ROLE_NAMES, SKILL_DESCS, SKILL_NAMES } from './text';
 import { GENERALS } from '../engine/generals';
 import { CardChip } from './CardChip';
 import { GeneralPortrait } from './portraits';
+import { FX_FRAMES } from './fxManifest';
+
+// 特效爆点:逐帧播放 /fx/<name>/<i>.png(QSGS 官方复刻帧序列),放完自毁
+function FxBurst({ name, onDone }: { name: string; onDone: () => void }) {
+  const [frame, setFrame] = useState(0);
+  const total = FX_FRAMES[name] ?? 0;
+  useEffect(() => {
+    const t = setInterval(() => setFrame((x) => x + 1), 80);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (frame >= total) onDone();
+  }, [frame, total, onDone]);
+  if (frame >= total) return null;
+  return <img className="fx-img" src={`/fx/${name}/${frame}.png`} alt="" />;
+}
 
 export function Seat({
   state, pid, humanId, targetable, targeted, onTarget, onEquipClick, selectedCards,
+  fx, onFxDone,
 }: {
   state: GameState;
   pid: PlayerId;
@@ -15,6 +33,8 @@ export function Seat({
   onTarget?: () => void;
   onEquipClick?: (cardId: number) => void;
   selectedCards?: number[];
+  fx?: { key: number; name: string }[];
+  onFxDone?: (key: number) => void;
 }) {
   const p = state.players.find((x) => x.id === pid)!;
   const isActive = state.turn.activePlayer === pid && !state.winner;
@@ -38,6 +58,13 @@ export function Seat({
       ].join(' ')}
       onClick={targetable ? onTarget : undefined}
     >
+      {fx && fx.length > 0 && onFxDone && (
+        <div className="seat-fx">
+          {fx.map((f) => (
+            <FxBurst key={f.key} name={f.name} onDone={() => onFxDone(f.key)} />
+          ))}
+        </div>
+      )}
       <div className="seat-header">
         <span className="seat-no">{p.seat + 1}号</span>
         <span className="seat-general">{p.unpicked ? '选将中…' : GENERAL_NAMES[p.general]}</span>
