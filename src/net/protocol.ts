@@ -8,6 +8,7 @@ export interface MemberInfo {
   name: string;
   connected: boolean;
   isHost: boolean;
+  trust: boolean; // 托管中:本人在线但把操作权交给 AI
 }
 
 export type ClientMessage =
@@ -16,6 +17,7 @@ export type ClientMessage =
   | { type: 'join-room'; roomId: string; name: string }
   | { type: 'rejoin'; roomId: string; token: string }
   | { type: 'start-game' }
+  | { type: 'trust'; on: boolean } // 切换托管:交给 AI / 收回操作权
   | { type: 'action'; requestId: number; response: ResponseData };
 
 export type ServerMessage =

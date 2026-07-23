@@ -187,6 +187,39 @@ describe('联机服务器', () => {
     expect(sync.you).toBe('p1');
     expect(sync.state.turn).toBeDefined();
   });
+
+  it('托管:开启后该玩家的回合由 AI 代打并广播状态,重连即取消', async () => {
+    // 房主一人局(其余 AI),托管后连自己的回合也由 AI 推进,对局不卡住
+    const srv = await setup();
+    const a = new TestClient(srv.port);
+    cleanup.push(() => a.close());
+    await a.open();
+    a.send({ type: 'create-room', name: '甲' });
+    await a.next((m) => m.type === 'welcome');
+    a.send({ type: 'start-game' });
+    // 等到轮到房主 p0 应答
+    await a.next((m) => isSync(m) && m.state.pendingRequest?.player === 'p0', 8000);
+
+    a.send({ type: 'trust', on: true });
+    // 广播的 room 消息里本人 trust=true
+    const room = await a.next(
+      (m) => m.type === 'room' && m.members.some((mm) => mm.seat === 0 && mm.trust),
+    ) as Extract<ServerMessage, { type: 'room' }>;
+    expect(room.members[0].trust).toBe(true);
+
+    // 托管后无需本人应答,对局仍推进到后续回合
+    const advanced = await a.next(
+      (m) => isSync(m) && m.state.turn.turnNumber >= 2, 8000,
+    ) as Sync;
+    expect(advanced.state.turn.turnNumber).toBeGreaterThanOrEqual(2);
+
+    // 取消托管
+    a.send({ type: 'trust', on: false });
+    const room2 = await a.next(
+      (m) => m.type === 'room' && m.members.every((mm) => !mm.trust),
+    ) as Extract<ServerMessage, { type: 'room' }>;
+    expect(room2.members[0].trust).toBe(false);
+  });
 });
 
 describe('视角过滤(redactStateFor)', () => {

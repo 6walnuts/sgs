@@ -170,6 +170,7 @@ body {
 .seat-info { margin-top: 4px; font-size: 13px; color: #c2cfc4; display: flex; gap: 10px; }
 .dead-tag { color: #e35b5b; font-weight: 700; }
 .waiting-tag { color: #d8b84a; }
+.trust-tag { color: #7ec8e3; font-weight: 700; cursor: help; }
 
 .seat-equips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 
@@ -314,6 +315,7 @@ body {
 .role-out { opacity: 0.3; filter: grayscale(1); text-decoration: line-through; }
 
 .btn-mini { padding: 3px 10px; font-size: 12px; }
+.btn-trust-on { background: #3f6ea5; color: #fff; border-color: #7ec8e3; }
 
 .log {
   background: #20382a;

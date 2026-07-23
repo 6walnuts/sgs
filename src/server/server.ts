@@ -29,6 +29,7 @@ interface Member {
   seat: number;
   isHost: boolean;
   ws: WebSocket | null;
+  trust: boolean; // 托管中:虽在线但由 AI 代为决策
 }
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -68,6 +69,7 @@ class Room {
       seat: this.members.length,
       isHost: this.members.length === 0,
       ws,
+      trust: false,
     };
     this.members.push(member);
     send(ws, { type: 'welcome', roomId: this.id, token: member.token, seat: member.seat });
@@ -80,10 +82,12 @@ class Room {
     if (!member) return '重连凭证无效';
     if (member.ws && member.ws !== ws) member.ws.close();
     member.ws = ws;
+    member.trust = false; // 重连即视为收回操作权
     send(ws, { type: 'welcome', roomId: this.id, token: member.token, seat: member.seat });
     this.broadcastRoom();
     if (this.phase === 'playing' && this.state) {
       send(ws, { type: 'sync', you: `p${member.seat}`, state: redactStateFor(this.state, `p${member.seat}`) });
+      this.pump(); // 若正等待该玩家应答,恢复为真人计时
     }
     return member;
   }
@@ -128,6 +132,16 @@ class Room {
     return null;
   }
 
+  setTrust(member: Member, on: boolean): void {
+    if (member.trust === on) return;
+    member.trust = on;
+    this.broadcastRoom();
+    // 若此刻正等待该玩家应答:开启托管立即改用 AI 计时,关闭则恢复真人计时
+    if (this.phase === 'playing' && this.state?.pendingRequest?.player === `p${member.seat}`) {
+      this.pump();
+    }
+  }
+
   handleAction(member: Member, requestId: number, response: ResponseData): void {
     if (this.phase !== 'playing' || !this.state) {
       send(member.ws, { type: 'error', message: '对局尚未开始' });
@@ -153,12 +167,15 @@ class Room {
     const req = this.state.pendingRequest;
     const seat = Number(req.player.slice(1));
     const member = this.members.find((m) => m.seat === seat);
+    // 空座与托管座都由 AI 决策;掉线座用较短兜底,在线真人用长超时
+    const useAi = !member || member.trust;
     const delay = !member
       ? this.aiDelayMs ?? this.opts.aiDelayMs
-      : member.ws === null
-        ? this.opts.offlineTimeoutMs
-        : this.opts.humanTimeoutMs;
-    const useAi = !member;
+      : member.trust
+        ? this.aiDelayMs ?? this.opts.aiDelayMs
+        : member.ws === null
+          ? this.opts.offlineTimeoutMs
+          : this.opts.humanTimeoutMs;
     this.timer = setTimeout(() => this.autoRespond(req, useAi), delay);
   }
 
@@ -189,7 +206,7 @@ class Room {
 
   private broadcastRoom(): void {
     const members: MemberInfo[] = this.members.map((m) => ({
-      seat: m.seat, name: m.name, connected: m.ws !== null, isHost: m.isHost,
+      seat: m.seat, name: m.name, connected: m.ws !== null, isHost: m.isHost, trust: m.trust,
     }));
     for (const m of this.members) {
       send(m.ws, {
@@ -314,6 +331,11 @@ export function createServer(options: ServerOptions) {
           if (!bound) return;
           const err = bound.room.startGame(bound.member);
           if (err) send(ws, { type: 'error', message: err });
+          return;
+        }
+        case 'trust': {
+          if (!bound) return;
+          bound.room.setTrust(bound.member, msg.on);
           return;
         }
         case 'action': {

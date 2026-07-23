@@ -304,7 +304,7 @@ function useTargetArrows(state: GameState): {
 }
 
 export function GameBoard({
-  state, humanId, submit, submitDefault, toast, overContent, onExit,
+  state, humanId, submit, submitDefault, toast, overContent, onExit, trust,
 }: {
   state: GameState;
   humanId: PlayerId;
@@ -313,6 +313,7 @@ export function GameBoard({
   toast: string | null;
   overContent: ReactNode;
   onExit?: () => void;
+  trust?: { on: boolean; seats: number[]; onToggle: () => void }; // 仅联机:托管开关与各座托管状态
 }) {
   const [selCards, setSelCards] = useState<number[]>([]);
   const [selSkill, setSelSkill] = useState<ActiveSkill | null>(null);
@@ -562,6 +563,7 @@ export function GameBoard({
       onTarget={() => toggleTarget(pid)}
       fx={fxList.filter((x) => x.pid === pid)}
       onFxDone={removeFx}
+      trusted={trust?.seats.includes(state.players.find((p) => p.id === pid)!.seat)}
     />
   );
 
@@ -648,6 +650,7 @@ export function GameBoard({
             selectedCards={selCards}
             fx={fxList.filter((x) => x.pid === humanId)}
             onFxDone={removeFx}
+            trusted={trust?.seats.includes(human.seat)}
             onEquipClick={
               isMyPlay && (selSkill === 'zhiheng' || selSkill === 'jzhiheng'
                 || selSkill === 'lijian'
@@ -751,6 +754,15 @@ export function GameBoard({
       </div>
 
       <div className="corner-btns">
+        {trust && (
+          <button
+            className={trust.on ? 'btn btn-mini btn-trust-on' : 'btn btn-mini'}
+            onClick={trust.onToggle}
+            title={trust.on ? '收回操作权,自己继续玩' : '暂时把操作权交给 AI(仍留在房间)'}
+          >
+            {trust.on ? '取消托管' : '托管'}
+          </button>
+        )}
         <BgmToggle />
         {onExit && (
           <button
