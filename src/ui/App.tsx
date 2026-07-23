@@ -338,6 +338,7 @@ function OnlinePlay({ intent, onExit }: { intent: NetIntent; onExit: () => void 
       submitDefault={() => net.submitHumanDefault()}
       toast={toast}
       onExit={onExit}
+      trust={{ on: net.myTrust, seats: net.trustSeats, onToggle: () => net.setTrust(!net.myTrust) }}
       overContent={(
         <>
           {net.isHost

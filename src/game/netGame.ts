@@ -37,6 +37,16 @@ export class NetGame {
     return this.room.members.some((m) => m.seat === this.room!.you && m.isHost);
   }
 
+  get myTrust(): boolean {
+    if (!this.room) return false;
+    return this.room.members.some((m) => m.seat === this.room!.you && m.trust);
+  }
+
+  // 托管中的座位号(用于在棋盘上标注)
+  get trustSeats(): number[] {
+    return this.room?.members.filter((m) => m.trust).map((m) => m.seat) ?? [];
+  }
+
   start(): void {
     this.stopped = false;
     if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
@@ -52,6 +62,10 @@ export class NetGame {
 
   startGame(): void {
     this.send({ type: 'start-game' });
+  }
+
+  setTrust(on: boolean): void {
+    this.send({ type: 'trust', on });
   }
 
   submitHuman(response: ResponseData): string | null {

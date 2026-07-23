@@ -23,7 +23,7 @@ function FxBurst({ name, onDone }: { name: string; onDone: () => void }) {
 
 export function Seat({
   state, pid, humanId, targetable, targeted, onTarget, onEquipClick, selectedCards,
-  fx, onFxDone,
+  fx, onFxDone, trusted,
 }: {
   state: GameState;
   pid: PlayerId;
@@ -35,6 +35,7 @@ export function Seat({
   selectedCards?: number[];
   fx?: { key: number; name: string }[];
   onFxDone?: (key: number) => void;
+  trusted?: boolean; // 联机:该座位处于托管(AI 代打)
 }) {
   const p = state.players.find((x) => x.id === pid)!;
   const isActive = state.turn.activePlayer === pid && !state.winner;
@@ -117,6 +118,7 @@ export function Seat({
                 梦魇×{mengyan}
               </span>
             )}
+            {trusted && p.alive && <span className="trust-tag" title="该玩家已托管,由 AI 代打">托管</span>}
             {!p.alive && <span className="dead-tag">阵亡</span>}
             {waiting && p.alive && <span className="waiting-tag">思考中…</span>}
           </div>
